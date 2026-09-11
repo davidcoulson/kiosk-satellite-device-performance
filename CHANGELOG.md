@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.09.11.01
+
+- Switch to date-based versioning (`YYYY.MM.DD.NN`), matching this author's other projects.
+
 ## 0.3.0
 
 - WebView dashboard responsiveness now also reports a rolling ~4-minute p95 and peak (in ha-paneld's own "ms of main-thread time per second" units) and a 24h renderer-reload count, ported from ha-paneld's "Dashboard responsiveness" detail card. Not ported: tap response, time-to-interactive, and the "likely cause" classifier — those need WebView-internal JS instrumentation SDK 1 doesn't expose.
