@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+- Publish every diagnostics reading as a real Home Assistant sensor entity — system CPU %, temperature, WebView busy %, WebView p95/peak ms/s, and 24h renderer reload count — alongside the existing status text. Null state ("unknown" in HA) rather than a fabricated zero for anything not measured yet. Declares the `entities` capability. Top processes stay status-text-only (dynamically-named rows don't fit a fixed sensor schema).
+- Publish a compact WebView main-thread-busy history chart (`publishSeries`), reusing the same rolling ~4-minute history the p95/peak are computed from. Resolves the two upstream SDK gaps this plugin's README used to document as limitations, now shipped in jxlarrea/kiosk-satellite's "Add SDK 1 plugin charts and compact sparklines" and "Add SDK 1 plugin sensors, selects and bar charts".
+
 ## 0.3.1-20260911
 
 - Correction: an earlier attempt at this release used a 4-component date-based version (`2026.09.11.01`), which Kiosk Satellite's plugin manifest validator rejects (`FormatException: Invalid plugin ID or version`) — it requires 3-component semver, optionally with a `-suffix`. That broken release has been removed; this one embeds the date as a semver prerelease suffix instead. No other changes since v0.3.0.

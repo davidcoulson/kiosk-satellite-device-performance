@@ -91,7 +91,29 @@ public final class WebViewPerfMathTest {
         assertEquals(100.0, (double) clamp.invoke(null, 150.0), "over 100 clamps to 100");
         assertEquals(42.0, (double) clamp.invoke(null, 42.0), "an in-range value passes through");
 
-        System.out.println("PASS: /proc/stat comm-parenthesis parsing, render-row parsing, jiffy-delta math, verdict thresholds.");
+        Method webViewChart = math.getDeclaredMethod("webViewChart", java.util.List.class, java.util.List.class);
+        webViewChart.setAccessible(true);
+        assertNull(webViewChart.invoke(null, java.util.Collections.emptyList(), java.util.Collections.emptyList()),
+            "no history yet — nothing to chart");
+        assertNull(webViewChart.invoke(null, java.util.Collections.singletonList(1000L), java.util.Collections.singletonList(12.0)),
+            "a single point isn't chartable — the host requires strictly increasing timestamps and it's not useful anyway");
+        java.util.List<Long> times = java.util.Arrays.asList(1000L, 11000L, 21000L);
+        java.util.List<Double> values = java.util.Arrays.asList(10.0, 20.0, 30.0);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> chart = (Map<String, Object>) webViewChart.invoke(null, times, values);
+        assertNotNull(chart, "three points produce a chart");
+        assertEquals("WebView main-thread busy", chart.get("title"), "chart title");
+        assertEquals("ms/s", chart.get("unit"), "chart unit");
+        assertEquals("line", chart.get("type"), "chart type");
+        assertEquals(true, chart.get("compact"), "compact sparkline, not a full chart");
+        assertEquals(times, chart.get("timestamps"), "timestamps pass through unchanged");
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> series = (java.util.List<Map<String, Object>>) chart.get("series");
+        assertEquals(1, series.size(), "one series");
+        assertEquals("WebView busy", series.get(0).get("name"), "series name");
+        assertEquals(values, series.get(0).get("values"), "series values pass through unchanged");
+
+        System.out.println("PASS: /proc/stat comm-parenthesis parsing, render-row parsing, jiffy-delta math, verdict thresholds, chart payload building.");
     }
 
     private static void assertTrue(boolean condition, String message) {

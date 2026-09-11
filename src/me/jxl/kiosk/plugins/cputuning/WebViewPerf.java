@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -80,10 +81,24 @@ final class WebViewPerf {
         }
     }
 
+    /** A retained busy-history sample and the timestamp it was taken at —
+     *  for the compact chart this plugin publishes alongside p95/peak, see
+     *  {@link #historySnapshot()}. Timestamps pair 1:1 with msPerSHistory,
+     *  pushed and evicted together. */
+    static final class HistorySnapshot {
+        final List<Long> timestampsMs;
+        final List<Double> valuesMsPerS;
+        HistorySnapshot(List<Long> timestampsMs, List<Double> valuesMsPerS) {
+            this.timestampsMs = timestampsMs;
+            this.valuesMsPerS = valuesMsPerS;
+        }
+    }
+
     private Map<Integer, Long> prevJiffies = new HashMap<>();
     private Long prevSampleAtMs;
     private Set<Integer> prevPids = new HashSet<>();
     private final Deque<Double> msPerSHistory = new ArrayDeque<>();
+    private final Deque<Long> historyAtMs = new ArrayDeque<>();
     private final Deque<Long> reloadAtMs = new ArrayDeque<>();
 
     /** Runs the probe and advances the delta baseline. Call on a worker
@@ -114,8 +129,19 @@ final class WebViewPerf {
         }
         double clamped = WebViewPerfMath.clampPct(pct);
         msPerSHistory.addLast(clamped * 10.0);
+        historyAtMs.addLast(now);
         while (msPerSHistory.size() > MAX_HISTORY_SAMPLES) msPerSHistory.removeFirst();
+        while (historyAtMs.size() > MAX_HISTORY_SAMPLES) historyAtMs.removeFirst();
         return Result.of(clamped, percentileMsPerS(95.0), peakMsPerS(), reloads);
+    }
+
+    /** Defensive-copy snapshot of the retained busy-ms/s history, paired
+     *  with the wall-clock time each sample was taken — for a compact
+     *  chart. Empty when no real (busy-percent-having) samples have been
+     *  retained yet, e.g. immediately after {@link #reset()} or while no
+     *  renderer has ever been found. */
+    HistorySnapshot historySnapshot() {
+        return new HistorySnapshot(new ArrayList<>(historyAtMs), new ArrayList<>(msPerSHistory));
     }
 
     private Double percentileMsPerS(double p) {
@@ -145,6 +171,7 @@ final class WebViewPerf {
         prevSampleAtMs = null;
         prevPids = new HashSet<>();
         msPerSHistory.clear();
+        historyAtMs.clear();
         reloadAtMs.clear();
     }
 }

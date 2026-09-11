@@ -22,15 +22,17 @@ import me.jxl.kiosk.plugins.PluginHost;
  * the full desired state on every configure() is simpler and harder to
  * get out of sync than tracking which field changed.
  *
- * Diagnostics (declares host.read) run on their own periodic timer,
- * independent of tuning changes: system CPU/RAM/temp via the host's own
- * `getStats` read command (no root — KS already tracks this), and WebView
- * dashboard responsiveness via a root /proc probe for the Chromium
- * renderer's CrRendererMain thread (see WebViewPerf) — ported from
- * ha-paneld's PerfReader, minus the chart it draws in its own admin web
- * UI (a plugin subpage has no equivalent rendering surface under SDK 1 —
- * see the upstream feature request this plugin's README links). Both
- * feed into the same status line the tuning summary already uses.
+ * Diagnostics (declares host.read and entities) run on their own periodic
+ * timer, independent of tuning changes: system CPU/RAM/temp via the
+ * host's own `getStats` read command (no root — KS already tracks this),
+ * and WebView dashboard responsiveness via a root /proc probe for the
+ * Chromium renderer's CrRendererMain thread (see WebViewPerf) — ported
+ * from ha-paneld's PerfReader. Every reading also publishes as a real SDK
+ * 1 sensor entity (see CpuEntities), and the WebView busy-history is
+ * published as a compact chart (see WebViewPerfMath.webViewChart) — both
+ * resolve upstream SDK gaps this plugin's README used to document as
+ * limitations. All of it feeds into the same status line the tuning
+ * summary already uses.
  */
 public final class CpuTuningPlugin implements KioskPlugin {
     private static final long DIAGNOSTICS_INTERVAL_S = 10L;
@@ -238,6 +240,39 @@ public final class CpuTuningPlugin implements KioskPlugin {
     private void refreshDiagnosticsStatus() {
         if (!alive.get()) return;
         host.status(composeStatus(Boolean.TRUE.equals(settings.get("simulation"))), false);
+        publishEntities();
+    }
+
+    /** Publishes CpuEntities' six always-present sensors (null state means
+     *  "not known yet", not "missing entity" — see CpuEntities' class
+     *  doc), plus the WebView busy-history chart when there's enough
+     *  retained history to draw one. */
+    private void publishEntities() {
+        Map<?, ?> stats = latestStats;
+        WebViewPerf.Result render = latestRender;
+        Double cpu = numberOrNull(stats == null ? null : stats.get("cpu"));
+        Double temp = numberOrNull(stats == null ? null : stats.get("temp"));
+        List<CpuEntities.Entity> entities = CpuEntities.compute(
+            cpu, temp,
+            render == null ? null : render.busyPct,
+            render == null ? null : render.p95MsPerS,
+            render == null ? null : render.peakMsPerS,
+            render == null ? null : render.reloadsLast24h);
+        for (CpuEntities.Entity e : entities) {
+            host.publishSensor(e.key, e.name, e.metadata, e.state);
+        }
+
+        WebViewPerf.HistorySnapshot history = webViewPerf.historySnapshot();
+        Map<String, Object> chart = WebViewPerfMath.webViewChart(history.timestampsMs, history.valuesMsPerS);
+        if (chart != null) {
+            host.publishSeries("webview_busy", chart);
+        } else {
+            host.removeSeries("webview_busy");
+        }
+    }
+
+    private static Double numberOrNull(Object v) {
+        return v instanceof Number ? ((Number) v).doubleValue() : null;
     }
 
     private String composeStatus(boolean simulation) {

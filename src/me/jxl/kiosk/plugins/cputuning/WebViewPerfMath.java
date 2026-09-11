@@ -147,4 +147,29 @@ final class WebViewPerfMath {
         int index = Math.max(0, Math.min(sorted.size() - 1, rank - 1));
         return sorted.get(index);
     }
+
+    /**
+     * Builds the {@code publishSeries} payload for the retained WebView
+     * busy-ms/s history — a single-series compact line chart, matching
+     * ha-paneld's own "Dashboard responsiveness" sparkline. Null (not
+     * published) with fewer than two samples: the host requires strictly
+     * increasing timestamps, and a chart with one point isn't useful
+     * anyway. [timestampsMs] and [valuesMsPerS] must be the same length —
+     * the caller ({@link WebViewPerf#historySnapshot()}) guarantees this
+     * since they're pushed and evicted together.
+     */
+    static Map<String, Object> webViewChart(List<Long> timestampsMs, List<Double> valuesMsPerS) {
+        if (timestampsMs.size() < 2) return null;
+        Map<String, Object> series = new HashMap<>();
+        series.put("name", "WebView busy");
+        series.put("values", new ArrayList<>(valuesMsPerS));
+        Map<String, Object> chart = new HashMap<>();
+        chart.put("title", "WebView main-thread busy");
+        chart.put("unit", "ms/s");
+        chart.put("type", "line");
+        chart.put("compact", true);
+        chart.put("timestamps", new ArrayList<>(timestampsMs));
+        chart.put("series", Collections.singletonList(series));
+        return chart;
+    }
 }

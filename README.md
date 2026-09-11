@@ -1,6 +1,6 @@
 # CPU Performance Mode for Kiosk Satellite
 
-Tune CPU and GPU governors, Android's system battery saver, and CPU frequency limits on rooted Kiosk Satellite panels — no native code, every control is a root shell command over standard Linux `cpufreq`/`devfreq` sysfs nodes. Also reports live diagnostics: system CPU/RAM/temp and WebView dashboard responsiveness.
+Tune CPU and GPU governors, Android's system battery saver, and CPU frequency limits on rooted Kiosk Satellite panels — no native code, every control is a root shell command over standard Linux `cpufreq`/`devfreq` sysfs nodes. Also reports live diagnostics: system CPU/RAM/temp and WebView dashboard responsiveness, as both status text and Home Assistant sensor entities, plus a compact WebView-busy history chart.
 
 ## Requirements
 
@@ -27,17 +27,21 @@ The plugin also declares **Check root access** and **Restore defaults** actions.
 | Min CPU frequency | Raises every cluster's floor clock speed to reduce ramp-up lag, same per-cluster percentage math. 0% leaves the floor at the kernel default. **Not verified reliable**: on the panel this was tested against, the kernel accepts the write (no error) but silently coerces the value upward past what was requested — some competing Android/kernel QoS floor already holds a higher minimum than userspace can lower it to. Treat this control as best-effort; it may do less than the percentage suggests, or nothing at all, on a given panel. |
 | Simulation mode | Exercises the controls without touching hardware. |
 
-## Diagnostics (status text — not Home Assistant entities yet)
+## Diagnostics
 
-Refreshed every 10 seconds, independent of the tuning controls above, and shown in the same status line:
+Refreshed every 10 seconds, independent of the tuning controls above, shown in the same status line, and — as of 0.4.0 — also published as real Home Assistant entities (SDK 1's `entities` capability now covers sensors, not just RGB lights, resolving [the upstream feature request](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/2) this section used to link):
 
-| Reading | Mechanism | Root? |
-| --- | --- | --- |
-| System CPU % and temperature | Kiosk Satellite's own `getStats` read command | No |
-| WebView dashboard responsiveness | A root `/proc` probe for the Chromium renderer's `CrRendererMain` thread — smooth / occasional / janky, by %-of-one-core busy time, plus a rolling p95/peak and a 24h renderer-reload count (see below) | Yes |
-| Top processes by CPU and RAM | A root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM) — shown as top-3 CPU and top-1 RAM in the compact status line | Yes |
+| Reading | Mechanism | Root? | HA entity |
+| --- | --- | --- | --- |
+| System CPU % and temperature | Kiosk Satellite's own `getStats` read command | No | `sensor.cpu_percent`, `sensor.temperature` |
+| WebView dashboard responsiveness | A root `/proc` probe for the Chromium renderer's `CrRendererMain` thread — smooth / occasional / janky, by %-of-one-core busy time, plus a rolling p95/peak and a 24h renderer-reload count (see below) | Yes | `sensor.webview_busy_percent`, `sensor.webview_p95_ms_per_s`, `sensor.webview_peak_ms_per_s`, `sensor.renderer_reloads_24h` |
+| Top processes by CPU and RAM | A root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM) — shown as top-3 CPU and top-1 RAM in the compact status line | Yes | Not published as entities — see below |
 
-None of this becomes a real Home Assistant sensor entity today — SDK 1's `entities` capability only supports RGB lights. See [jxlarrea/kiosk-satellite-plugin-hello-world#2](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/2), and [#1](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/1) for the related chart-rendering gap (this plugin shows only the latest reading plus a rolling p95/peak, not a full history/graph, for the same reason).
+Every sensor entity publishes on every diagnostics tick, with a null state (Home Assistant's "unknown") rather than a fabricated zero for whatever hasn't been measured yet (e.g. `webview_busy_percent` before the first root probe completes, or on an unrooted panel where it never will). Top processes stay status-text-only: the ranking is a list of dynamically-named rows (whatever process happens to be busiest right now), not a fixed set of keys a sensor entity's schema expects.
+
+### WebView busy history chart
+
+SDK 1 also added bounded time-series charts, resolving [the related chart-rendering gap](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/1) this section used to link. This plugin publishes a compact sparkline of the same rolling ~4-minute `CrRendererMain` busy-ms/s history the p95/peak below are computed from — one line series, updated every diagnostics tick, visible in both the on-device plugin subpage and Remote Admin. Not published until there are at least two retained samples (a one-point chart isn't useful, and the host requires strictly increasing timestamps). Simulation mode fakes the *latest* reading for every other diagnostic but does not fake a chart history — the chart stays empty in simulation, since faking a plausible multi-minute time series felt like more complexity than the demo value justified.
 
 ### p95, peak and renderer reloads
 
@@ -70,7 +74,7 @@ python3 tools/test.py
 python3 tools/build.py
 ```
 
-`tools/test.py` runs device-free unit tests of the governor-resolution and frequency-percent math (including the per-cluster hardware-max scenario from a real big.LITTLE panel), the WebView jiffy-delta parsing (including a `/proc/pid/stat` line whose `comm` field itself contains a stray `)`, the classic bug in a naive port), and the top-processes `/proc` dump parsing/ranking/RSS-to-MB math — it proves the logic, not device compatibility. `tools/build.py` produces the ZIP, checksum and manifest in `dist/`.
+`tools/test.py` runs device-free unit tests of the governor-resolution and frequency-percent math (including the per-cluster hardware-max scenario from a real big.LITTLE panel), the WebView jiffy-delta parsing (including a `/proc/pid/stat` line whose `comm` field itself contains a stray `)`, the classic bug in a naive port) and chart-payload building, the top-processes `/proc` dump parsing/ranking/RSS-to-MB math, and which of the six sensor entities publish with what state — it proves the logic, not device compatibility. `tools/build.py` produces the ZIP, checksum and manifest in `dist/`.
 
 ## Publishing and handoff
 
