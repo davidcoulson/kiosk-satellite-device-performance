@@ -39,6 +39,14 @@ final class WebViewEntities {
         }
     }
 
+    /** The smooth/occasional/janky classification, as a text sensor. Kept
+     *  separate from {@link #compute}'s numeric sensors because it's a
+     *  String, not a Double — and published at all so the verdict shows up
+     *  in the host's own Readings list alongside the numbers it summarizes,
+     *  rather than only existing in status text. */
+    static final String VERDICT_KEY = "webview_verdict";
+    static final String VERDICT_NAME = "WebView responsiveness";
+
     static List<Entity> compute(Double webViewBusyPercent, Double webViewP95MsPerS, Double webViewPeakMsPerS,
                                  Integer rendererReloads24h) {
         List<Entity> entities = new ArrayList<>();
@@ -54,6 +62,9 @@ final class WebViewEntities {
         Map<String, Object> m = new HashMap<>();
         m.put("unit", "%");
         m.put("stateClass", "measurement");
+        // One decimal in the host's Readings list: these move enough that
+        // whole percent hides real change, and the default is 0.
+        m.put("accuracyDecimals", 1);
         return m;
     }
 
@@ -61,6 +72,7 @@ final class WebViewEntities {
         Map<String, Object> m = new HashMap<>();
         m.put("unit", "ms/s");
         m.put("stateClass", "measurement");
+        m.put("accuracyDecimals", 1);
         return m;
     }
 

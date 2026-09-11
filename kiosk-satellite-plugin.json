@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "device-performance",
   "name": "Device Performance",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "minAndroidSdk": 24,
   "entryClass": "me.jxl.kiosk.plugins.deviceperformance.DevicePerformancePlugin",
   "description": "CPU and GPU governor tuning, Android battery saver, CPU frequency capping, and diagnostics: system CPU/RAM/temp, WebView dashboard responsiveness (with rolling p95/peak, a compact history chart, and renderer reload tracking), and top processes by CPU/RAM — as both status text and Home Assistant sensor entities. No native code; every control is a root shell command over standard Linux cpufreq/devfreq sysfs nodes. Formerly \"CPU Performance Mode\" — renamed to reflect its broader scope.",

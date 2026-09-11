@@ -31,12 +31,20 @@ public final class WebViewEntitiesTest {
         Map<String, Object> busyMeta = (Map<String, Object>) metaField.get(byKey.get("webview_busy_percent"));
         assertEquals("%", busyMeta.get("unit"), "webview busy unit");
         assertEquals("measurement", busyMeta.get("stateClass"), "webview busy state class");
+        assertEquals(1, busyMeta.get("accuracyDecimals"),
+            "one decimal, so the host's Readings list doesn't round away real movement");
 
         assertEquals(41.0, stateField.get(byKey.get("webview_p95_ms_per_s")), "webview p95 state");
         assertEquals(52.0, stateField.get(byKey.get("webview_peak_ms_per_s")), "webview peak state");
         @SuppressWarnings("unchecked")
         Map<String, Object> p95Meta = (Map<String, Object>) metaField.get(byKey.get("webview_p95_ms_per_s"));
         assertEquals("ms/s", p95Meta.get("unit"), "webview p95 unit");
+        assertEquals(1, p95Meta.get("accuracyDecimals"), "webview p95 shows one decimal too");
+
+        java.lang.reflect.Field verdictKey = entities.getDeclaredField("VERDICT_KEY");
+        verdictKey.setAccessible(true);
+        assertEquals("webview_verdict", verdictKey.get(null),
+            "the smooth/occasional/janky verdict publishes as its own text sensor, not just status text");
 
         assertEquals(3.0, stateField.get(byKey.get("renderer_reloads_24h")), "reload count converted to Double");
 

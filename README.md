@@ -36,14 +36,16 @@ Refreshed every 10 seconds, independent of the tuning controls above, and — as
 | Reading | Mechanism | Root? | HA entity |
 | --- | --- | --- | --- |
 | System CPU % and temperature | Kiosk Satellite's own `getStats` read command | No | Not republished — Kiosk Satellite already exposes these as its own native `cpu`/`cpu_temp` entities from the same read command, so a second sensor here would just be a confusing duplicate |
-| WebView dashboard responsiveness | A root `/proc` probe for the Chromium renderer's `CrRendererMain` thread — smooth / occasional / janky, by %-of-one-core busy time, plus a rolling p95/peak and a 24h renderer-reload count (see below) | Yes | `sensor.webview_busy_percent`, `sensor.webview_p95_ms_per_s`, `sensor.webview_peak_ms_per_s`, `sensor.renderer_reloads_24h` |
-| Top processes by CPU and RAM | A root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM) — shown as top-3 CPU and top-1 RAM in the compact status line | Yes | Not published as entities — see below |
+| WebView dashboard responsiveness | A root `/proc` probe for the Chromium renderer's `CrRendererMain` thread — smooth / occasional / janky, by %-of-one-core busy time, plus a rolling p95/peak and a 24h renderer-reload count (see below) | Yes | `sensor.webview_busy_percent`, `sensor.webview_p95_ms_per_s`, `sensor.webview_peak_ms_per_s`, `sensor.renderer_reloads_24h`, `text_sensor.webview_verdict` |
+| Top processes by CPU and RAM | A root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM) — shown as top-3 CPU and top-1 RAM in status text | Yes | Not published as entities — see below |
 
 Every sensor entity publishes on every diagnostics tick, with a null state (Home Assistant's "unknown") rather than a fabricated zero for whatever hasn't been measured yet (e.g. `webview_busy_percent` before the first root probe completes, or on an unrooted panel where it never will). Top processes stay status-text-only: the ranking is a list of dynamically-named rows (whatever process happens to be busiest right now), not a fixed set of keys a sensor entity's schema expects.
 
-### The status text is one reading per line, not a single run-on string
+### Readings render as a real list, and the status text no longer duplicates them
 
-SDK 1's plugin subpage has exactly one slot for free-form runtime text — `host.status()`, a single string with no structured "list of readings" a plugin can address directly (filed as [an upstream feature request](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/5) for a real per-plugin readings list, distinct from the Home Assistant sync above). Short of that, this plugin joins its status lines with `\n` rather than `·`: the on-device subpage renders it with a plain Flutter `Text` widget, which treats `\n` as a real line break — so on the panel itself, this reads as an actual list (tuning summary, then CPU/temp, then WebView, then reloads, then top processes, each on its own line). Remote Admin's web view doesn't benefit the same way (its HTML rendering collapses `\n` back to a space, same single-line look as before) — a gap that request also covers.
+As of 0.6.0, every measurement this plugin publishes shows up as a proper label/value row in the host's own **Readings** section — on-device *and* in Remote Admin — thanks to upstream's "Show live plugin readings in native settings and Remote Admin", which resolved [the feature request](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/5) filed for exactly this. The numeric sensors carry `accuracyDecimals: 1` so the list shows one decimal instead of rounding real movement away, and the smooth/occasional/janky verdict publishes as its own text sensor rather than living only in status text.
+
+Because of that, the status text was deliberately trimmed rather than left duplicating the same numbers one line above their own Readings rows. What it still carries is what Readings can't express: the current **tuning configuration** (settings, not measurements), the **top-processes ranking** (dynamically-named rows that don't fit a fixed entity schema), and the two "no reading yet" states — `measuring…` vs `no renderer detected` — which a null-stated entity would flatten into an ambiguous "No data".
 
 ### WebView busy history chart
 
@@ -62,7 +64,7 @@ Ported from ha-paneld's `PerfReader.sampleTop`/`rankCpuProcesses`/`rankRamProces
 Two simplifications from ha-paneld's own fuller version, both accepted deliberately:
 
 - **Process names** come from `/proc/<pid>/stat`'s own `comm` field (kernel-truncated to 16 bytes) rather than a second root round-trip to `/proc/<pid>/cmdline` for the full command line — a long package name reads as `sandboxed_proces` rather than the full `com.google.android.webview:sandboxed_process0`. One probe instead of two.
-- **Display is compact**: top-3 by CPU and top-1 by RAM in the status line, not ha-paneld's full top-5-by-CPU and top-5-by-RAM tables — this plugin's status text has roughly a 1000-character budget shared with every other diagnostic line, not a dedicated dashboard panel.
+- **Display is compact**: top-3 by CPU and top-1 by RAM in status text, not ha-paneld's full top-5-by-CPU and top-5-by-RAM tables — `host.status()` has roughly a 1000-character budget, not a dedicated dashboard panel.
 
 ### Why CrRendererMain, not `dumpsys gfxinfo` frame jank
 

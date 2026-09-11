@@ -259,6 +259,8 @@ public final class DevicePerformancePlugin implements KioskPlugin {
         for (WebViewEntities.Entity e : entities) {
             host.publishSensor(e.key, e.name, e.metadata, e.state);
         }
+        host.publishTextSensor(WebViewEntities.VERDICT_KEY, WebViewEntities.VERDICT_NAME,
+            render == null ? null : render.verdict);
 
         WebViewPerf.HistorySnapshot history = webViewPerf.historySnapshot();
         Map<String, Object> chart = WebViewPerfMath.webViewChart(history.timestampsMs, history.valuesMsPerS);
@@ -269,14 +271,19 @@ public final class DevicePerformancePlugin implements KioskPlugin {
         }
     }
 
-    /** One reading per line, not one long dot-joined run-on string: the
-     *  status text is a plain Flutter Text widget on-device, which renders
-     *  `\n` as a real line break — this reads as a list there, even though
-     *  Remote Admin's web view (HTML, no `white-space: pre-line`) collapses
-     *  newlines back to spaces and still shows one line. SDK 1 has no
-     *  structured "list of readings" UI a plugin can address directly (see
-     *  the upstream feature request this plugin's README links); this is
-     *  the best a single `host.status()` string can do until that exists. */
+    /** Deliberately short, and deliberately NOT a copy of the readings:
+     *  every WebView number this plugin measures is published as an entity,
+     *  and the host now renders those as a real label/value list in its own
+     *  Readings section (upstream's "Show live plugin readings in native
+     *  settings and Remote Admin", resolving the feature request this
+     *  plugin's README links). Repeating them here would just be the same
+     *  data twice on one screen.
+     *
+     *  What stays is what the Readings list can't show: the current tuning
+     *  configuration (settings, not measurements), and the top-processes
+     *  ranking (dynamically-named rows, which don't fit a fixed entity
+     *  schema — see appendTopProcesses). Still `\n`-joined, one item per
+     *  line, since the on-device Text widget renders real line breaks. */
     private String composeStatus(boolean simulation) {
         List<String> lines = new ArrayList<>();
         StringBuilder tuning = new StringBuilder();
@@ -295,40 +302,15 @@ public final class DevicePerformancePlugin implements KioskPlugin {
     }
 
     private void appendDiagnostics(List<String> lines) {
-        Map<?, ?> stats = latestStats;
-        if (stats != null) {
-            Object cpu = stats.get("cpu");
-            Object temp = stats.get("temp");
-            if (cpu != null || temp != null) {
-                StringBuilder line = new StringBuilder();
-                if (cpu != null) line.append("System CPU: ").append(formatNumber(cpu)).append("%");
-                if (temp != null) {
-                    if (line.length() > 0) line.append(" · ");
-                    line.append("Temp: ").append(formatNumber(temp)).append("°C");
-                }
-                lines.add(line.toString());
-            }
-        }
+        // Only the states the Readings list can't express: "measuring…"
+        // and "no renderer detected" are the absence of a reading, which
+        // a null-stated entity shows as a bare "No data" without saying
+        // which of the two it is.
         WebViewPerf.Result render = latestRender;
         if (render == null) {
             lines.add("WebView: measuring…");
         } else if (render.busyPct == null) {
             lines.add("WebView: no renderer detected");
-        } else {
-            StringBuilder line = new StringBuilder();
-            line.append("WebView: ").append(Math.round(render.busyPct))
-                .append("% (").append(render.verdict).append(")");
-            if (render.p95MsPerS != null) {
-                line.append(" · p95 ").append(Math.round(render.p95MsPerS)).append(" ms/s");
-            }
-            if (render.peakMsPerS != null) {
-                line.append(" · peak ").append(Math.round(render.peakMsPerS)).append(" ms/s");
-            }
-            lines.add(line.toString());
-        }
-        if (render != null) {
-            lines.add(render.reloadsLast24h + " renderer reload"
-                + (render.reloadsLast24h == 1 ? "" : "s") + " (24h)");
         }
         appendTopProcesses(lines);
     }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Upstream shipped a real Readings list ("Show live plugin readings in native settings and Remote Admin", resolving [the feature request](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/5) filed for exactly this), so every published measurement now renders as a proper label/value row on-device *and* in Remote Admin. Status text is trimmed to match: it no longer repeats the WebView numbers that now have their own rows, keeping only what the list can't express — the tuning configuration, the top-processes ranking, and the `measuring…` vs `no renderer detected` distinction a null-stated entity would flatten to "No data".
+- Publish the smooth/occasional/janky verdict as its own `webview_verdict` text sensor, so it appears in the Readings list (and Home Assistant) rather than existing only inside status text.
+- Numeric sensors now carry `accuracyDecimals: 1`, so the Readings list shows one decimal instead of rounding sub-percent movement away.
+
 ## 0.5.0
 
 - **Renamed from `cpu-performance-mode` to `device-performance`** (display name "CPU Performance Mode" → "Device Performance"), matching Network ADB's earlier full rename precedent. This is a breaking change for existing installs — see "Renamed from CPU Performance Mode" in the README. Repository, Java package (`cputuning` → `deviceperformance`), and entry class (`CpuTuningPlugin` → `DevicePerformancePlugin`) renamed to match. `CpuTuningMath`/`CpuEntities` also renamed to `TuningMath`/`WebViewEntities` — the latter no longer had "Cpu" in its actual content after 0.4.1 removed the CPU/temperature entities.
