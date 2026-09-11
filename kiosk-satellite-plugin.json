@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "apiVersion": 1,
+  "id": "cpu-performance-mode",
+  "name": "CPU Performance Mode",
+  "version": "0.1.0",
+  "minAndroidSdk": 24,
+  "entryClass": "me.jxl.kiosk.plugins.cputuning.CpuTuningPlugin",
+  "description": "CPU and GPU governor tuning, Android battery saver, and CPU frequency capping for rooted panels. No native code; every control is a root shell command over standard Linux cpufreq/devfreq sysfs nodes.",
+  "author": "Kiosk Satellite contributors",
+  "license": "Apache-2.0",
+  "capabilities": [],
+  "settings": [
+    {
+      "key": "cpuTier",
+      "type": "select",
+      "title": "CPU governor",
+      "options": ["Auto", "Performance", "Efficiency"],
+      "default": "Auto",
+      "group": "CPU"
+    },
+    {
+      "key": "gpuTier",
+      "type": "select",
+      "title": "GPU governor",
+      "description": "Only shown as effective if this panel exposes a GPU devfreq node.",
+      "options": ["Auto", "Performance", "Efficiency"],
+      "default": "Auto",
+      "group": "GPU"
+    },
+    {
+      "key": "batterySaver",
+      "type": "boolean",
+      "title": "Android battery saver",
+      "description": "Toggles Android's own system Battery Saver, separate from the CPU/GPU governor.",
+      "default": false,
+      "group": "Power"
+    },
+    {
+      "key": "maxFreqPercent",
+      "type": "number",
+      "title": "Max CPU frequency",
+      "description": "Caps every CPU core's top clock speed to this percentage of its own hardware maximum. 100% leaves the ceiling untouched.",
+      "min": 25,
+      "max": 100,
+      "step": 5,
+      "default": 100,
+      "unit": "%",
+      "group": "Advanced"
+    },
+    {
+      "key": "minFreqPercent",
+      "type": "number",
+      "title": "Min CPU frequency",
+      "description": "Raises every CPU core's floor clock speed to this percentage of its own hardware maximum, to reduce ramp-up lag. 0% leaves the floor at the kernel default. Best-effort: some panels silently hold a higher floor than this can lower, so results vary by hardware.",
+      "min": 0,
+      "max": 75,
+      "step": 5,
+      "default": 0,
+      "unit": "%",
+      "group": "Advanced"
+    },
+    {
+      "key": "simulation",
+      "type": "boolean",
+      "title": "Simulation mode",
+      "description": "Test the controls without touching hardware.",
+      "default": false,
+      "group": "Developer Tools"
+    }
+  ],
+  "commands": [
+    {
+      "id": "detect",
+      "title": "Check root access"
+    },
+    {
+      "id": "restoreDefaults",
+      "title": "Restore defaults"
+    }
+  ]
+}
