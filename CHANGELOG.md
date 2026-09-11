@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- System CPU % and temperature via Kiosk Satellite's own `getStats` read command (declares `host.read`) — no root.
+- WebView dashboard responsiveness: a root `/proc` probe for the Chromium renderer's `CrRendererMain` thread, ported from ha-paneld's PerfReader, classified smooth/occasional/janky by %-of-one-core busy time. Verified end-to-end against a live dashboard.
+- Both refresh on their own 10-second timer, independent of the tuning controls, and appear in the same status line.
+- Status text only — no chart/history (blocked on [jxlarrea/kiosk-satellite-plugin-hello-world#1](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/1)) and no real Home Assistant entity (blocked on [#2](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/2)).
+
 ## 0.1.0
 
 - CPU governor tuning as three tiers (Auto, Performance, Efficiency) across every `cpufreq` policy cluster, resolved from the panel's own available governor list.

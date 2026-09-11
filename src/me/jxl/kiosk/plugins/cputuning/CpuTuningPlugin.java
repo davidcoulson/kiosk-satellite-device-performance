@@ -21,12 +21,25 @@ import me.jxl.kiosk.plugins.PluginHost;
  * are cheap, idempotent, infrequent, user-triggered writes, so reapplying
  * the full desired state on every configure() is simpler and harder to
  * get out of sync than tracking which field changed.
+ *
+ * Diagnostics (declares host.read) run on their own periodic timer,
+ * independent of tuning changes: system CPU/RAM/temp via the host's own
+ * `getStats` read command (no root — KS already tracks this), and WebView
+ * dashboard responsiveness via a root /proc probe for the Chromium
+ * renderer's CrRendererMain thread (see WebViewPerf) — ported from
+ * ha-paneld's PerfReader, minus the chart it draws in its own admin web
+ * UI (a plugin subpage has no equivalent rendering surface under SDK 1 —
+ * see the upstream feature request this plugin's README links). Both
+ * feed into the same status line the tuning summary already uses.
  */
 public final class CpuTuningPlugin implements KioskPlugin {
+    private static final long DIAGNOSTICS_INTERVAL_S = 10L;
+
     private final AtomicBoolean alive = new AtomicBoolean();
     private PluginHost host;
-    private ExecutorService worker;
+    private ScheduledExecutorService worker;
     private Map<String, Object> settings = new HashMap<>();
+    private final WebViewPerf webViewPerf = new WebViewPerf();
 
     // Populated by detect(); null fields mean "not available on this panel".
     private volatile boolean rooted;
@@ -35,14 +48,23 @@ public final class CpuTuningPlugin implements KioskPlugin {
     private volatile List<String> gpuGovernors = Collections.emptyList();
     private Boolean lastSimulation;
 
+    // Latest diagnostics, refreshed by the periodic tick and folded into
+    // whichever status line is composed next (tuning-change or diagnostics
+    // tick, whichever runs last wins — host.status() has no history).
+    private volatile Map<?, ?> latestStats; // {battery, charging, cpu, temp} from getStats
+    private volatile WebViewPerf.Result latestRender = WebViewPerf.Result.NO_RENDERER;
+    private ScheduledFuture<?> diagnosticsTask;
+
     public void start(PluginHost host, Map<String, Object> settings) {
         this.host = host;
         alive.set(true);
-        worker = Executors.newSingleThreadExecutor(r -> {
+        worker = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "cpu-tuning");
             t.setDaemon(true);
             return t;
         });
+        diagnosticsTask = worker.scheduleWithFixedDelay(
+            () -> submit(this::runDiagnosticsTick), 0, DIAGNOSTICS_INTERVAL_S, TimeUnit.SECONDS);
         configure(settings);
     }
 
@@ -53,7 +75,10 @@ public final class CpuTuningPlugin implements KioskPlugin {
             boolean recheck = lastSimulation == null || lastSimulation != simulation;
             settings = copy;
             lastSimulation = simulation;
-            if (recheck) detect();
+            if (recheck) {
+                detect();
+                webViewPerf.reset(); // don't diff a real-hardware baseline against simulated samples or vice versa
+            }
             apply();
         });
     }
@@ -195,14 +220,24 @@ public final class CpuTuningPlugin implements KioskPlugin {
 
     private void status(boolean ok) {
         if (!alive.get()) return;
-        if (Boolean.TRUE.equals(settings.get("simulation"))) {
-            host.status("Simulation mode. No hardware is being changed.", false);
-            return;
-        }
-        if (!ok) {
+        boolean simulation = Boolean.TRUE.equals(settings.get("simulation"));
+        if (!simulation && !ok) {
             host.status("One or more tuning writes failed — check the panel's kernel exposes these controls.", true);
             return;
         }
+        host.status(composeStatus(simulation), false);
+    }
+
+    /** Diagnostics (system stats + WebView responsiveness) run on their
+     *  own timer and refresh independently of tuning changes — this is
+     *  what that timer calls, always showing the full composed status
+     *  since a diagnostics tick never represents a tuning-write outcome. */
+    private void refreshDiagnosticsStatus() {
+        if (!alive.get()) return;
+        host.status(composeStatus(Boolean.TRUE.equals(settings.get("simulation"))), false);
+    }
+
+    private String composeStatus(boolean simulation) {
         StringBuilder msg = new StringBuilder();
         msg.append("CPU: ").append(settings.getOrDefault("cpuTier", CpuTuningMath.TIER_AUTO));
         if (gpuNodePath != null) {
@@ -212,7 +247,57 @@ public final class CpuTuningPlugin implements KioskPlugin {
         }
         msg.append(" · Battery saver: ")
             .append(Boolean.TRUE.equals(settings.get("batterySaver")) ? "on" : "off");
-        host.status(msg.toString(), false);
+        appendDiagnostics(msg);
+        if (simulation) msg.append(" · Simulation mode");
+        return msg.toString();
+    }
+
+    private void appendDiagnostics(StringBuilder msg) {
+        Map<?, ?> stats = latestStats;
+        if (stats != null) {
+            Object cpu = stats.get("cpu");
+            Object temp = stats.get("temp");
+            if (cpu != null) msg.append(" · System CPU: ").append(formatNumber(cpu)).append("%");
+            if (temp != null) msg.append(" · Temp: ").append(formatNumber(temp)).append("°C");
+        }
+        WebViewPerf.Result render = latestRender;
+        if (render.busyPct == null) {
+            msg.append(" · WebView: no renderer detected");
+        } else {
+            msg.append(" · WebView: ").append(Math.round(render.busyPct))
+                .append("% (").append(render.verdict).append(")");
+        }
+    }
+
+    private static String formatNumber(Object n) {
+        if (!(n instanceof Number)) return String.valueOf(n);
+        double d = ((Number) n).doubleValue();
+        return d == Math.floor(d) ? String.valueOf((long) d) : String.format(java.util.Locale.ROOT, "%.1f", d);
+    }
+
+    /** System CPU/RAM/temp (host.read, no root — KS already tracks this)
+     *  and WebView dashboard responsiveness (root, this plugin's own
+     *  /proc probe) — independent of each other and of tuning changes,
+     *  on their own fixed cadence. */
+    private void runDiagnosticsTick() {
+        boolean simulation = Boolean.TRUE.equals(settings.get("simulation"));
+        if (simulation) {
+            Map<String, Object> fake = new HashMap<>();
+            fake.put("cpu", 22);
+            fake.put("temp", 41.5);
+            latestStats = fake;
+            latestRender = WebViewPerf.Result.of(37.5);
+            refreshDiagnosticsStatus();
+            return;
+        }
+        host.executeCommand("getStats", Collections.emptyMap(), (ok, data, error) -> submit(() -> {
+            if (ok && data instanceof Map) latestStats = (Map<?, ?>) data;
+            refreshDiagnosticsStatus();
+        }));
+        if (rooted) {
+            latestRender = webViewPerf.tick(RootShell.COMMAND_TIMEOUT_MS);
+            refreshDiagnosticsStatus();
+        }
     }
 
     private interface Task { void run() throws Exception; }
@@ -231,6 +316,7 @@ public final class CpuTuningPlugin implements KioskPlugin {
 
     public void stop() throws Exception {
         alive.set(false);
+        if (diagnosticsTask != null) diagnosticsTask.cancel(false);
         worker.shutdownNow();
         worker.awaitTermination(1000, TimeUnit.MILLISECONDS);
         // Best-effort restore to the safe defaults (Auto/Auto, no caps,
