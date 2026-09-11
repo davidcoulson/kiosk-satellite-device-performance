@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package me.jxl.kiosk.plugins.cputuning;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Owns the CrRendererMain jiffy-delta sampling state and runs the root
@@ -16,6 +22,17 @@ import java.util.Map;
  * WebView), scan each one's threads for `CrRendererMain`, and print its
  * `/proc/.../stat` line. Root-gated: reading another app's `/proc/<pid>`
  * entries needs root on modern Android (`hidepid`).
+ *
+ * Also retains a rolling ~4-minute history of busy readings (same window
+ * ha-paneld's own dashboard-responsiveness card uses) for a p95/peak
+ * alongside the latest sample, and counts renderer process replacements
+ * over a trailing 24h as a reload count — both directly inspired by
+ * ha-paneld's own detailed card ("Main-thread blocking 0.0 ms/s · p95 0
+ * ms/s · longest frame 222 ms" / "Renderer reloads (24h) 0 · stable").
+ * Not ported: tap response, time-to-interactive and the "likely cause"
+ * classifier — those need instrumentation inside the WebView's own JS
+ * execution (page-load lifecycle hooks, touch-event timing), which a
+ * plugin has no access to under SDK 1.
  */
 final class WebViewPerf {
     private static final String PROBE_CMD =
@@ -24,26 +41,50 @@ final class WebViewPerf {
             + "if [ \"$c\" = CrRendererMain ]; then IFS= read -r s < $t/stat 2>/dev/null && echo \"$pid $s\"; fi; "
             + "done; done; true";
 
+    /** ~4 minutes at this plugin's 10s diagnostics cadence — the same
+     *  window ha-paneld's own card reports over. */
+    private static final int MAX_HISTORY_SAMPLES = 24;
+    private static final long RELOAD_WINDOW_MS = 24L * 3_600_000L;
+    private static final int MAX_RELOAD_SAMPLES = 200;
+
     static final class Result {
         /** null = no Chromium renderer process found at all (first sample,
          *  or nothing running) — distinct from a real 0% reading. */
         final Double busyPct;
         final String verdict; // null when busyPct is null
+        /** ms of main-thread time per second of wall time — the same
+         *  reading as busyPct, just in ha-paneld's own "ms/s" units
+         *  (ms/s = %busy * 10). Null exactly when busyPct is null. */
+        final Double busyMsPerS;
+        final Double p95MsPerS; // over the retained history; null with no history yet
+        final Double peakMsPerS; // the single highest sample retained
+        final int reloadsLast24h;
 
-        private Result(Double busyPct, String verdict) {
+        private Result(Double busyPct, String verdict, Double busyMsPerS,
+                        Double p95MsPerS, Double peakMsPerS, int reloadsLast24h) {
             this.busyPct = busyPct;
             this.verdict = verdict;
+            this.busyMsPerS = busyMsPerS;
+            this.p95MsPerS = p95MsPerS;
+            this.peakMsPerS = peakMsPerS;
+            this.reloadsLast24h = reloadsLast24h;
         }
 
-        static final Result NO_RENDERER = new Result(null, null);
+        static Result noRenderer(Double p95MsPerS, Double peakMsPerS, int reloadsLast24h) {
+            return new Result(null, null, null, p95MsPerS, peakMsPerS, reloadsLast24h);
+        }
 
-        static Result of(double clampedPct) {
-            return new Result(clampedPct, WebViewPerfMath.verdict(clampedPct));
+        static Result of(double clampedPct, Double p95MsPerS, Double peakMsPerS, int reloadsLast24h) {
+            return new Result(clampedPct, WebViewPerfMath.verdict(clampedPct), clampedPct * 10.0,
+                p95MsPerS, peakMsPerS, reloadsLast24h);
         }
     }
 
     private Map<Integer, Long> prevJiffies = new HashMap<>();
     private Long prevSampleAtMs;
+    private Set<Integer> prevPids = new HashSet<>();
+    private final Deque<Double> msPerSHistory = new ArrayDeque<>();
+    private final Deque<Long> reloadAtMs = new ArrayDeque<>();
 
     /** Runs the probe and advances the delta baseline. Call on a worker
      *  thread — this blocks on a root shell round trip. */
@@ -53,17 +94,57 @@ final class WebViewPerf {
         long now = System.currentTimeMillis();
         double dtSeconds = prevSampleAtMs == null ? -1 : (now - prevSampleAtMs) / 1000.0;
         double pct = WebViewPerfMath.busiestMainPct(prevJiffies, cur, dtSeconds);
+
+        // A renderer replacement: the pid set this tick shares nothing with
+        // last tick's, and both ticks actually had a renderer running —
+        // never counted from "none -> some" or "some -> none" alone, only
+        // a genuine swap.
+        Set<Integer> curPids = cur.keySet();
+        if (!prevPids.isEmpty() && !curPids.isEmpty() && Collections.disjoint(prevPids, curPids)) {
+            reloadAtMs.addLast(now);
+            while (reloadAtMs.size() > MAX_RELOAD_SAMPLES) reloadAtMs.removeFirst();
+        }
+        prevPids = new HashSet<>(curPids);
         prevJiffies = cur;
         prevSampleAtMs = now;
-        if (pct < 0) return Result.NO_RENDERER;
-        return Result.of(WebViewPerfMath.clampPct(pct));
+
+        int reloads = reloadsInWindow(now);
+        if (pct < 0) {
+            return Result.noRenderer(percentileMsPerS(95.0), peakMsPerS(), reloads);
+        }
+        double clamped = WebViewPerfMath.clampPct(pct);
+        msPerSHistory.addLast(clamped * 10.0);
+        while (msPerSHistory.size() > MAX_HISTORY_SAMPLES) msPerSHistory.removeFirst();
+        return Result.of(clamped, percentileMsPerS(95.0), peakMsPerS(), reloads);
     }
 
-    /** Resets the delta baseline — call when simulation mode toggles, so a
-     *  stale real-hardware baseline can't produce a bogus first delta
-     *  against a simulated sample, or vice versa. */
+    private Double percentileMsPerS(double p) {
+        if (msPerSHistory.isEmpty()) return null;
+        double result = WebViewPerfMath.percentile(new ArrayList<>(msPerSHistory), p);
+        return result < 0 ? null : result;
+    }
+
+    private Double peakMsPerS() {
+        Double peak = null;
+        for (double v : msPerSHistory) if (peak == null || v > peak) peak = v;
+        return peak;
+    }
+
+    private int reloadsInWindow(long now) {
+        long cutoff = now - RELOAD_WINDOW_MS;
+        int count = 0;
+        for (long t : reloadAtMs) if (t > cutoff) count++;
+        return count;
+    }
+
+    /** Resets every baseline — call when simulation mode toggles, so a
+     *  stale real-hardware baseline (or reload/percentile history) can't
+     *  mix with simulated samples, or vice versa. */
     void reset() {
         prevJiffies = new HashMap<>();
         prevSampleAtMs = null;
+        prevPids = new HashSet<>();
+        msPerSHistory.clear();
+        reloadAtMs.clear();
     }
 }

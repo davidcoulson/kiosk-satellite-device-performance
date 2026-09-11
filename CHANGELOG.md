@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- WebView dashboard responsiveness now also reports a rolling ~4-minute p95 and peak (in ha-paneld's own "ms of main-thread time per second" units) and a 24h renderer-reload count, ported from ha-paneld's "Dashboard responsiveness" detail card. Not ported: tap response, time-to-interactive, and the "likely cause" classifier — those need WebView-internal JS instrumentation SDK 1 doesn't expose.
+- New top-processes-by-CPU/RAM diagnostic: a single root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM), shown as top-3 CPU and top-1 RAM in the status line. Ported from ha-paneld's PerfReader.sampleTop, simplified to use the kernel's truncated `comm` name instead of a second `/proc/<pid>/cmdline` round-trip. Verified against a real 382-process dump on production hardware.
+
 ## 0.2.0
 
 - System CPU % and temperature via Kiosk Satellite's own `getStats` read command (declares `host.read`) — no root.

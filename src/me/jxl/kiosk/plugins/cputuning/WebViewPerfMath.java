@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package me.jxl.kiosk.plugins.cputuning;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -122,5 +125,26 @@ final class WebViewPerfMath {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    /**
+     * The [p]th percentile (0..100) of [samples], nearest-rank method —
+     * the smallest value at or above which at least [p]% of samples fall.
+     * [samples] need not be sorted; this copies and sorts rather than
+     * mutating the caller's list. Empty input returns -1 (no data, not a
+     * bogus 0). [p] is clamped to 0..100 defensively. Same nearest-rank
+     * implementation as the Network Diagnostics plugin's own
+     * NetworkMath.percentile — duplicated rather than shared, since
+     * plugins are independent artifacts with no cross-plugin dependency
+     * mechanism in this SDK.
+     */
+    static double percentile(List<Double> samples, double p) {
+        if (samples.isEmpty()) return -1.0;
+        List<Double> sorted = new ArrayList<>(samples);
+        Collections.sort(sorted);
+        double clamped = Math.max(0.0, Math.min(100.0, p));
+        int rank = (int) Math.ceil(clamped / 100.0 * sorted.size());
+        int index = Math.max(0, Math.min(sorted.size() - 1, rank - 1));
+        return sorted.get(index);
     }
 }

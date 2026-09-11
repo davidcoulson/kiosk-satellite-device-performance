@@ -40,6 +40,7 @@ public final class CpuTuningPlugin implements KioskPlugin {
     private ScheduledExecutorService worker;
     private Map<String, Object> settings = new HashMap<>();
     private final WebViewPerf webViewPerf = new WebViewPerf();
+    private final TopProcesses topProcesses = new TopProcesses();
 
     // Populated by detect(); null fields mean "not available on this panel".
     private volatile boolean rooted;
@@ -52,7 +53,8 @@ public final class CpuTuningPlugin implements KioskPlugin {
     // whichever status line is composed next (tuning-change or diagnostics
     // tick, whichever runs last wins — host.status() has no history).
     private volatile Map<?, ?> latestStats; // {battery, charging, cpu, temp} from getStats
-    private volatile WebViewPerf.Result latestRender = WebViewPerf.Result.NO_RENDERER;
+    private volatile WebViewPerf.Result latestRender; // null until the first diagnostics tick
+    private volatile TopProcesses.Result latestTop = TopProcesses.Result.EMPTY;
     private ScheduledFuture<?> diagnosticsTask;
 
     public void start(PluginHost host, Map<String, Object> settings) {
@@ -78,6 +80,7 @@ public final class CpuTuningPlugin implements KioskPlugin {
             if (recheck) {
                 detect();
                 webViewPerf.reset(); // don't diff a real-hardware baseline against simulated samples or vice versa
+                topProcesses.reset();
             }
             apply();
         });
@@ -261,11 +264,45 @@ public final class CpuTuningPlugin implements KioskPlugin {
             if (temp != null) msg.append(" · Temp: ").append(formatNumber(temp)).append("°C");
         }
         WebViewPerf.Result render = latestRender;
-        if (render.busyPct == null) {
+        if (render == null) {
+            msg.append(" · WebView: measuring…");
+        } else if (render.busyPct == null) {
             msg.append(" · WebView: no renderer detected");
         } else {
             msg.append(" · WebView: ").append(Math.round(render.busyPct))
                 .append("% (").append(render.verdict).append(")");
+            if (render.p95MsPerS != null) {
+                msg.append(" · p95 ").append(Math.round(render.p95MsPerS)).append(" ms/s");
+            }
+            if (render.peakMsPerS != null) {
+                msg.append(" · peak ").append(Math.round(render.peakMsPerS)).append(" ms/s");
+            }
+        }
+        if (render != null) {
+            msg.append(" · ").append(render.reloadsLast24h).append(" renderer reload")
+                .append(render.reloadsLast24h == 1 ? "" : "s").append(" (24h)");
+        }
+        appendTopProcesses(msg);
+    }
+
+    /** Top-3 CPU consumers and the single top RAM consumer — a compact
+     *  stand-in for ha-paneld's own full top-5-by-CPU/top-5-by-RAM tables,
+     *  which don't fit a 1000-character single-line status. Names come
+     *  from the kernel's own 16-char-truncated `comm` field, not the full
+     *  package/command line — see TopProcessMath's class doc for why. */
+    private void appendTopProcesses(StringBuilder msg) {
+        TopProcesses.Result top = latestTop;
+        if (!top.byCpu.isEmpty()) {
+            msg.append(" · Top CPU: ");
+            for (int i = 0; i < Math.min(3, top.byCpu.size()); i++) {
+                if (i > 0) msg.append(", ");
+                TopProcesses.Row r = top.byCpu.get(i);
+                msg.append(r.name).append(" ").append(formatNumber(r.value)).append("%");
+            }
+        }
+        if (!top.byRam.isEmpty()) {
+            TopProcesses.Row r = top.byRam.get(0);
+            msg.append(" · Top RAM: ").append(r.name).append(" ").append(formatNumber(r.value)).append("MB");
         }
     }
 
@@ -275,10 +312,10 @@ public final class CpuTuningPlugin implements KioskPlugin {
         return d == Math.floor(d) ? String.valueOf((long) d) : String.format(java.util.Locale.ROOT, "%.1f", d);
     }
 
-    /** System CPU/RAM/temp (host.read, no root — KS already tracks this)
-     *  and WebView dashboard responsiveness (root, this plugin's own
-     *  /proc probe) — independent of each other and of tuning changes,
-     *  on their own fixed cadence. */
+    /** System CPU/RAM/temp (host.read, no root — KS already tracks this),
+     *  WebView dashboard responsiveness, and top processes by CPU/RAM
+     *  (both root, this plugin's own /proc probes) — independent of each
+     *  other and of tuning changes, on their own fixed cadence. */
     private void runDiagnosticsTick() {
         boolean simulation = Boolean.TRUE.equals(settings.get("simulation"));
         if (simulation) {
@@ -286,7 +323,13 @@ public final class CpuTuningPlugin implements KioskPlugin {
             fake.put("cpu", 22);
             fake.put("temp", 41.5);
             latestStats = fake;
-            latestRender = WebViewPerf.Result.of(37.5);
+            latestRender = WebViewPerf.Result.of(37.5, 41.0, 52.0, 0);
+            latestTop = new TopProcesses.Result(
+                Arrays.asList(
+                    new TopProcesses.Row("sandboxed_proces", 12.3),
+                    new TopProcesses.Row("system_server", 4.1),
+                    new TopProcesses.Row("surfaceflinger", 2.1)),
+                Collections.singletonList(new TopProcesses.Row("com.android.chrome", 340.5)));
             refreshDiagnosticsStatus();
             return;
         }
@@ -296,6 +339,7 @@ public final class CpuTuningPlugin implements KioskPlugin {
         }));
         if (rooted) {
             latestRender = webViewPerf.tick(RootShell.COMMAND_TIMEOUT_MS);
+            latestTop = topProcesses.tick(RootShell.COMMAND_TIMEOUT_MS);
             refreshDiagnosticsStatus();
         }
     }

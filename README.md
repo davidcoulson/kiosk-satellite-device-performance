@@ -34,9 +34,25 @@ Refreshed every 10 seconds, independent of the tuning controls above, and shown 
 | Reading | Mechanism | Root? |
 | --- | --- | --- |
 | System CPU % and temperature | Kiosk Satellite's own `getStats` read command | No |
-| WebView dashboard responsiveness | A root `/proc` probe for the Chromium renderer's `CrRendererMain` thread — smooth / occasional / janky, by %-of-one-core busy time | Yes |
+| WebView dashboard responsiveness | A root `/proc` probe for the Chromium renderer's `CrRendererMain` thread — smooth / occasional / janky, by %-of-one-core busy time, plus a rolling p95/peak and a 24h renderer-reload count (see below) | Yes |
+| Top processes by CPU and RAM | A root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM) — shown as top-3 CPU and top-1 RAM in the compact status line | Yes |
 
-None of this becomes a real Home Assistant sensor entity today — SDK 1's `entities` capability only supports RGB lights. See [jxlarrea/kiosk-satellite-plugin-hello-world#2](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/2), and [#1](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/1) for the related chart-rendering gap (this plugin shows only the latest reading, not a history/graph, for the same reason).
+None of this becomes a real Home Assistant sensor entity today — SDK 1's `entities` capability only supports RGB lights. See [jxlarrea/kiosk-satellite-plugin-hello-world#2](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/2), and [#1](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/1) for the related chart-rendering gap (this plugin shows only the latest reading plus a rolling p95/peak, not a full history/graph, for the same reason).
+
+### p95, peak and renderer reloads
+
+Inspired directly by ha-paneld's own "Dashboard responsiveness" detail card (`Main-thread blocking 0.0 ms/s · p95 0 ms/s · longest frame 222 ms` / `Renderer reloads (24h) 0 · stable`). This plugin retains a rolling ~4-minute history of `CrRendererMain` busy readings (same window ha-paneld uses, at this plugin's 10s diagnostics cadence) and reports the p95 and peak alongside the latest sample, both in ha-paneld's own "ms of main-thread time per second of wall time" units. It also counts renderer process replacements — the sandboxed renderer's pid set changing entirely between two ticks — over a trailing 24h as a reload count.
+
+**Not ported**, because they need instrumentation inside the WebView's own JS execution (page-load lifecycle hooks, touch-event timing) that a plugin has no access to under SDK 1: tap response, time-to-interactive, and the "likely cause" classifier.
+
+### Top processes by CPU and RAM
+
+Ported from ha-paneld's `PerfReader.sampleTop`/`rankCpuProcesses`/`rankRamProcesses`: one root shell reads `/proc/stat`'s aggregate `cpu ` line (for total jiffies) and every process's own `/proc/<pid>/stat` line in a single round trip, ranks by positive jiffy delta between two ticks (CPU) and by raw resident-page count (RAM), and converts pages to MB using the device's *actual* page size (`getconf PAGESIZE` — never assumed 4K, since some newer ARM64 chips use 16K pages). Verified against a real 382-process dump on production hardware.
+
+Two simplifications from ha-paneld's own fuller version, both accepted deliberately:
+
+- **Process names** come from `/proc/<pid>/stat`'s own `comm` field (kernel-truncated to 16 bytes) rather than a second root round-trip to `/proc/<pid>/cmdline` for the full command line — a long package name reads as `sandboxed_proces` rather than the full `com.google.android.webview:sandboxed_process0`. One probe instead of two.
+- **Display is compact**: top-3 by CPU and top-1 by RAM in the status line, not ha-paneld's full top-5-by-CPU and top-5-by-RAM tables — this plugin's status text has roughly a 1000-character budget shared with every other diagnostic line, not a dedicated dashboard panel.
 
 ### Why CrRendererMain, not `dumpsys gfxinfo` frame jank
 
@@ -54,8 +70,10 @@ python3 tools/test.py
 python3 tools/build.py
 ```
 
-`tools/test.py` runs device-free unit tests of the governor-resolution and frequency-percent math (including the per-cluster hardware-max scenario from a real big.LITTLE panel) plus the WebView jiffy-delta parsing (including a `/proc/pid/stat` line whose `comm` field itself contains a stray `)`, the classic bug in a naive port) — it proves the logic, not device compatibility. `tools/build.py` produces the ZIP, checksum and manifest in `dist/`.
+`tools/test.py` runs device-free unit tests of the governor-resolution and frequency-percent math (including the per-cluster hardware-max scenario from a real big.LITTLE panel), the WebView jiffy-delta parsing (including a `/proc/pid/stat` line whose `comm` field itself contains a stray `)`, the classic bug in a naive port), and the top-processes `/proc` dump parsing/ranking/RSS-to-MB math — it proves the logic, not device compatibility. `tools/build.py` produces the ZIP, checksum and manifest in `dist/`.
 
 ## Publishing and handoff
 
 Apache-2.0. The plugin ID is `cpu-performance-mode`. See [jxlarrea/kiosk-satellite-plugin-hello-world](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world) for the SDK 1 documentation this plugin was built against.
+
+Author: David Coulson. Built with AI assistance (Claude Code).
