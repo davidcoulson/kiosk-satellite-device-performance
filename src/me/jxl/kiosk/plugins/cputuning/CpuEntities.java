@@ -14,7 +14,13 @@ import java.util.Map;
  * present (a null state, not a missing entity, represents "not known
  * yet") since none of these readings depend on optional plugin settings
  * the way a configurable ping target does — so there's no removal-diffing
- * to do, just publish six sensors every diagnostics tick.
+ * to do, just publish four sensors every diagnostics tick.
+ *
+ * Deliberately does NOT republish system CPU % or temperature: Kiosk
+ * Satellite already exposes those as its own native `cpu`/`cpu_temp`
+ * ESPHome entities (see app/lib/managers/btproxy/esp_entities.dart) from
+ * the same `getStats` read command this plugin also uses — a second
+ * sensor here would just be a confusing duplicate in Home Assistant.
  */
 final class CpuEntities {
     private CpuEntities() {}
@@ -33,12 +39,9 @@ final class CpuEntities {
         }
     }
 
-    static List<Entity> compute(Double cpuPercent, Double temperatureC,
-                                 Double webViewBusyPercent, Double webViewP95MsPerS, Double webViewPeakMsPerS,
+    static List<Entity> compute(Double webViewBusyPercent, Double webViewP95MsPerS, Double webViewPeakMsPerS,
                                  Integer rendererReloads24h) {
         List<Entity> entities = new ArrayList<>();
-        entities.add(new Entity("cpu_percent", "System CPU", percentMetadata(), cpuPercent));
-        entities.add(new Entity("temperature", "Temperature", temperatureMetadata(), temperatureC));
         entities.add(new Entity("webview_busy_percent", "WebView busy", percentMetadata(), webViewBusyPercent));
         entities.add(new Entity("webview_p95_ms_per_s", "WebView p95", msPerSMetadata(), webViewP95MsPerS));
         entities.add(new Entity("webview_peak_ms_per_s", "WebView peak", msPerSMetadata(), webViewPeakMsPerS));
@@ -50,14 +53,6 @@ final class CpuEntities {
     private static Map<String, Object> percentMetadata() {
         Map<String, Object> m = new HashMap<>();
         m.put("unit", "%");
-        m.put("stateClass", "measurement");
-        return m;
-    }
-
-    private static Map<String, Object> temperatureMetadata() {
-        Map<String, Object> m = new HashMap<>();
-        m.put("unit", "°C");
-        m.put("deviceClass", "temperature");
         m.put("stateClass", "measurement");
         return m;
     }

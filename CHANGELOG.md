@@ -1,8 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- Fix: 0.4.0 republished system CPU % and temperature as this plugin's own `sensor.cpu_percent`/`sensor.temperature` entities, duplicating Kiosk Satellite's existing native `cpu`/`cpu_temp` entities (same underlying `getStats` reading). Removed — this plugin now publishes only the four WebView-related sensors, which have no existing equivalent.
+
 ## 0.4.0
 
-- Publish every diagnostics reading as a real Home Assistant sensor entity — system CPU %, temperature, WebView busy %, WebView p95/peak ms/s, and 24h renderer reload count — alongside the existing status text. Null state ("unknown" in HA) rather than a fabricated zero for anything not measured yet. Declares the `entities` capability. Top processes stay status-text-only (dynamically-named rows don't fit a fixed sensor schema).
+- Publish every diagnostics reading as a real Home Assistant sensor entity — system CPU %, temperature, WebView busy %, WebView p95/peak ms/s, and 24h renderer reload count — alongside the existing status text. Null state ("unknown" in HA) rather than a fabricated zero for anything not measured yet. Declares the `entities` capability. Top processes stay status-text-only (dynamically-named rows don't fit a fixed sensor schema). **See 0.4.1**: the CPU %/temperature entities were removed one release later as duplicates of Kiosk Satellite's own native entities.
 - Publish a compact WebView main-thread-busy history chart (`publishSeries`), reusing the same rolling ~4-minute history the p95/peak are computed from. Resolves the two upstream SDK gaps this plugin's README used to document as limitations, now shipped in jxlarrea/kiosk-satellite's "Add SDK 1 plugin charts and compact sparklines" and "Add SDK 1 plugin sensors, selects and bar charts".
 
 ## 0.3.1-20260911

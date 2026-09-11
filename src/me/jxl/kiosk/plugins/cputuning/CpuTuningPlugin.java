@@ -243,17 +243,15 @@ public final class CpuTuningPlugin implements KioskPlugin {
         publishEntities();
     }
 
-    /** Publishes CpuEntities' six always-present sensors (null state means
+    /** Publishes CpuEntities' four always-present sensors (null state means
      *  "not known yet", not "missing entity" — see CpuEntities' class
      *  doc), plus the WebView busy-history chart when there's enough
-     *  retained history to draw one. */
+     *  retained history to draw one. Deliberately excludes system CPU %
+     *  and temperature — Kiosk Satellite already publishes those as its
+     *  own native entities. */
     private void publishEntities() {
-        Map<?, ?> stats = latestStats;
         WebViewPerf.Result render = latestRender;
-        Double cpu = numberOrNull(stats == null ? null : stats.get("cpu"));
-        Double temp = numberOrNull(stats == null ? null : stats.get("temp"));
         List<CpuEntities.Entity> entities = CpuEntities.compute(
-            cpu, temp,
             render == null ? null : render.busyPct,
             render == null ? null : render.p95MsPerS,
             render == null ? null : render.peakMsPerS,
@@ -269,10 +267,6 @@ public final class CpuTuningPlugin implements KioskPlugin {
         } else {
             host.removeSeries("webview_busy");
         }
-    }
-
-    private static Double numberOrNull(Object v) {
-        return v instanceof Number ? ((Number) v).doubleValue() : null;
     }
 
     private String composeStatus(boolean simulation) {

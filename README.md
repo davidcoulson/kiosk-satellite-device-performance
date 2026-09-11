@@ -33,7 +33,7 @@ Refreshed every 10 seconds, independent of the tuning controls above, shown in t
 
 | Reading | Mechanism | Root? | HA entity |
 | --- | --- | --- | --- |
-| System CPU % and temperature | Kiosk Satellite's own `getStats` read command | No | `sensor.cpu_percent`, `sensor.temperature` |
+| System CPU % and temperature | Kiosk Satellite's own `getStats` read command | No | Not republished — Kiosk Satellite already exposes these as its own native `cpu`/`cpu_temp` entities from the same read command, so a second sensor here would just be a confusing duplicate |
 | WebView dashboard responsiveness | A root `/proc` probe for the Chromium renderer's `CrRendererMain` thread — smooth / occasional / janky, by %-of-one-core busy time, plus a rolling p95/peak and a 24h renderer-reload count (see below) | Yes | `sensor.webview_busy_percent`, `sensor.webview_p95_ms_per_s`, `sensor.webview_peak_ms_per_s`, `sensor.renderer_reloads_24h` |
 | Top processes by CPU and RAM | A root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM) — shown as top-3 CPU and top-1 RAM in the compact status line | Yes | Not published as entities — see below |
 
