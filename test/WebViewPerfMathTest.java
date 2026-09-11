@@ -8,7 +8,7 @@ import java.util.Map;
  *  package (same convention as the Hello World template's own test). */
 public final class WebViewPerfMathTest {
     public static void main(String[] args) throws Exception {
-        Class<?> math = Class.forName("me.jxl.kiosk.plugins.cputuning.WebViewPerfMath");
+        Class<?> math = Class.forName("me.jxl.kiosk.plugins.deviceperformance.WebViewPerfMath");
 
         Method statFields = math.getDeclaredMethod("statFieldsAfterComm", String.class);
         statFields.setAccessible(true);

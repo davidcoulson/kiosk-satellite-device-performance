@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package me.jxl.kiosk.plugins.cputuning;
+package me.jxl.kiosk.plugins.deviceperformance;
 
 import java.util.concurrent.TimeUnit;
 

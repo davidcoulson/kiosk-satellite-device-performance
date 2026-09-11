@@ -4,13 +4,13 @@ import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
-/** Device-free tests for CpuEntities.compute, reflected into since the
+/** Device-free tests for WebViewEntities.compute, reflected into since the
  *  test lives outside the plugin's package (same convention as the Hello
  *  World template's own test). */
-public final class CpuEntitiesTest {
+public final class WebViewEntitiesTest {
     public static void main(String[] args) throws Exception {
-        Class<?> entities = Class.forName("me.jxl.kiosk.plugins.cputuning.CpuEntities");
-        Class<?> entityClass = Class.forName("me.jxl.kiosk.plugins.cputuning.CpuEntities$Entity");
+        Class<?> entities = Class.forName("me.jxl.kiosk.plugins.deviceperformance.WebViewEntities");
+        Class<?> entityClass = Class.forName("me.jxl.kiosk.plugins.deviceperformance.WebViewEntities$Entity");
         Method compute = entities.getDeclaredMethod("compute", Double.class, Double.class, Double.class, Integer.class);
         compute.setAccessible(true);
         Field keyField = entityClass.getDeclaredField("key"); keyField.setAccessible(true);

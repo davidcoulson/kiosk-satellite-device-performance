@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package me.jxl.kiosk.plugins.cputuning;
+package me.jxl.kiosk.plugins.deviceperformance;
 
 import java.util.List;
 import java.util.regex.Pattern;
@@ -8,11 +8,11 @@ import java.util.regex.Pattern;
  * Pure, device-free logic: governor-name resolution, frequency-percent
  * math and the safety validation that guards every value before it's
  * interpolated into a shell command. Kept separate from
- * {@link CpuTuningPlugin} so it's unit-testable without an Android device
+ * {@link DevicePerformancePlugin} so it's unit-testable without an Android device
  * or root — see test/CpuTuningTest.java.
  */
-final class CpuTuningMath {
-    private CpuTuningMath() {}
+final class TuningMath {
+    private TuningMath() {}
 
     static final String TIER_AUTO = "Auto";
     static final String TIER_PERFORMANCE = "Performance";

@@ -1,4 +1,6 @@
-# CPU Performance Mode for Kiosk Satellite
+# Device Performance for Kiosk Satellite
+
+Formerly **CPU Performance Mode** — renamed because the plugin covers more than CPU tuning today (WebView responsiveness, top processes by CPU/RAM, and more), and "CPU" undersold it. Same plugin, same history; see [Renamed from CPU Performance Mode](#renamed-from-cpu-performance-mode) below if you had the old one installed.
 
 Tune CPU and GPU governors, Android's system battery saver, and CPU frequency limits on rooted Kiosk Satellite panels — no native code, every control is a root shell command over standard Linux `cpufreq`/`devfreq` sysfs nodes. Also reports live diagnostics: system CPU/RAM/temp and WebView dashboard responsiveness, as both status text and Home Assistant sensor entities, plus a compact WebView-busy history chart.
 
@@ -11,7 +13,7 @@ Tune CPU and GPU governors, Android's system battery saver, and CPU frequency li
 
 1. Wait for a stable GitHub release and its GitHub Actions build to complete.
 2. Open **Plugin Manager > Add plugin**, paste this repository URL, review the manifest and README and choose **Trust and install**.
-3. Enable **CPU Performance Mode** on its entry row and open the subpage.
+3. Enable **Device Performance** on its entry row and open the subpage.
 4. Check the hardware status, then adjust the controls below. Changes save automatically.
 
 The plugin also declares **Check root access** and **Restore defaults** actions. Assign them in Gestures or add a kiosk drawer shortcut / Home Assistant button.
@@ -29,7 +31,7 @@ The plugin also declares **Check root access** and **Restore defaults** actions.
 
 ## Diagnostics
 
-Refreshed every 10 seconds, independent of the tuning controls above, shown in the same status line, and — as of 0.4.0 — also published as real Home Assistant entities (SDK 1's `entities` capability now covers sensors, not just RGB lights, resolving [the upstream feature request](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/2) this section used to link):
+Refreshed every 10 seconds, independent of the tuning controls above, and — as of 0.4.0 — also published as real Home Assistant entities (SDK 1's `entities` capability now covers sensors, not just RGB lights, resolving [the upstream feature request](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/2) this section used to link):
 
 | Reading | Mechanism | Root? | HA entity |
 | --- | --- | --- | --- |
@@ -38,6 +40,10 @@ Refreshed every 10 seconds, independent of the tuning controls above, shown in t
 | Top processes by CPU and RAM | A root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM) — shown as top-3 CPU and top-1 RAM in the compact status line | Yes | Not published as entities — see below |
 
 Every sensor entity publishes on every diagnostics tick, with a null state (Home Assistant's "unknown") rather than a fabricated zero for whatever hasn't been measured yet (e.g. `webview_busy_percent` before the first root probe completes, or on an unrooted panel where it never will). Top processes stay status-text-only: the ranking is a list of dynamically-named rows (whatever process happens to be busiest right now), not a fixed set of keys a sensor entity's schema expects.
+
+### The status text is one reading per line, not a single run-on string
+
+SDK 1's plugin subpage has exactly one slot for free-form runtime text — `host.status()`, a single string with no structured "list of readings" a plugin can address directly (filed as [an upstream feature request](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/5) for a real per-plugin readings list, distinct from the Home Assistant sync above). Short of that, this plugin joins its status lines with `\n` rather than `·`: the on-device subpage renders it with a plain Flutter `Text` widget, which treats `\n` as a real line break — so on the panel itself, this reads as an actual list (tuning summary, then CPU/temp, then WebView, then reloads, then top processes, each on its own line). Remote Admin's web view doesn't benefit the same way (its HTML rendering collapses `\n` back to a space, same single-line look as before) — a gap that request also covers.
 
 ### WebView busy history chart
 
@@ -74,10 +80,14 @@ python3 tools/test.py
 python3 tools/build.py
 ```
 
-`tools/test.py` runs device-free unit tests of the governor-resolution and frequency-percent math (including the per-cluster hardware-max scenario from a real big.LITTLE panel), the WebView jiffy-delta parsing (including a `/proc/pid/stat` line whose `comm` field itself contains a stray `)`, the classic bug in a naive port) and chart-payload building, the top-processes `/proc` dump parsing/ranking/RSS-to-MB math, and which of the six sensor entities publish with what state — it proves the logic, not device compatibility. `tools/build.py` produces the ZIP, checksum and manifest in `dist/`.
+`tools/test.py` runs device-free unit tests of the governor-resolution and frequency-percent math (including the per-cluster hardware-max scenario from a real big.LITTLE panel), the WebView jiffy-delta parsing (including a `/proc/pid/stat` line whose `comm` field itself contains a stray `)`, the classic bug in a naive port) and chart-payload building, the top-processes `/proc` dump parsing/ranking/RSS-to-MB math, and which of the four sensor entities publish with what state — it proves the logic, not device compatibility. `tools/build.py` produces the ZIP, checksum and manifest in `dist/`.
+
+## Renamed from CPU Performance Mode
+
+This plugin shipped as `cpu-performance-mode` through 0.4.1. Renamed to `device-performance` at 0.5.0 to match its actual scope (WebView responsiveness and top-processes ranking aren't CPU-specific), matching the same full-rename approach [Network ADB](https://github.com/davidcoulson/kiosk-satellite-network-adb) used when it dropped "Wireless" from its own name. The plugin ID changed, which means Home Assistant sees this as a different plugin than before: if you had `cpu-performance-mode` installed, remove it and add this repository fresh — its entities will need to be re-added to any dashboards that referenced the old ones. Settings, tuning behavior, and all diagnostics are otherwise unchanged.
 
 ## Publishing and handoff
 
-Apache-2.0. The plugin ID is `cpu-performance-mode`. See [jxlarrea/kiosk-satellite-plugin-hello-world](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world) for the SDK 1 documentation this plugin was built against.
+Apache-2.0. The plugin ID is `device-performance`. See [jxlarrea/kiosk-satellite-plugin-hello-world](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world) for the SDK 1 documentation this plugin was built against.
 
 Author: David Coulson. Built with AI assistance (Claude Code).

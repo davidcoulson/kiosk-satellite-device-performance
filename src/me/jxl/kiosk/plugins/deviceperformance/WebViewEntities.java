@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package me.jxl.kiosk.plugins.cputuning;
+package me.jxl.kiosk.plugins.deviceperformance;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -9,7 +9,7 @@ import java.util.Map;
 /**
  * Pure mapping from this plugin's latest diagnostics readings to the set
  * of SDK 1 sensor entities it should publish — no PluginHost calls, so
- * it's unit-testable; see test/CpuEntitiesTest.java. Unlike Network
+ * it's unit-testable; see test/WebViewEntitiesTest.java. Unlike Network
  * Diagnostics' NetworkEntities, every entity here is always structurally
  * present (a null state, not a missing entity, represents "not known
  * yet") since none of these readings depend on optional plugin settings
@@ -22,8 +22,8 @@ import java.util.Map;
  * the same `getStats` read command this plugin also uses — a second
  * sensor here would just be a confusing duplicate in Home Assistant.
  */
-final class CpuEntities {
-    private CpuEntities() {}
+final class WebViewEntities {
+    private WebViewEntities() {}
 
     static final class Entity {
         final String key;

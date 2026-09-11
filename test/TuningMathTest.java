@@ -5,13 +5,13 @@ import java.util.List;
 import java.lang.reflect.Method;
 
 /**
- * Device-free tests for CpuTuningMath's package-private static methods,
+ * Device-free tests for TuningMath's package-private static methods,
  * reflected into since the test lives outside the plugin's package (same
  * constraint the Hello World template's own test works under).
  */
-public final class CpuTuningTest {
+public final class TuningMathTest {
     public static void main(String[] args) throws Exception {
-        Class<?> math = Class.forName("me.jxl.kiosk.plugins.cputuning.CpuTuningMath");
+        Class<?> math = Class.forName("me.jxl.kiosk.plugins.deviceperformance.TuningMath");
 
         Method isSafe = math.getDeclaredMethod("isSafeGovernorName", String.class);
         isSafe.setAccessible(true);

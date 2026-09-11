@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package me.jxl.kiosk.plugins.cputuning;
+package me.jxl.kiosk.plugins.deviceperformance;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -28,13 +28,13 @@ import me.jxl.kiosk.plugins.PluginHost;
  * and WebView dashboard responsiveness via a root /proc probe for the
  * Chromium renderer's CrRendererMain thread (see WebViewPerf) — ported
  * from ha-paneld's PerfReader. Every reading also publishes as a real SDK
- * 1 sensor entity (see CpuEntities), and the WebView busy-history is
+ * 1 sensor entity (see WebViewEntities), and the WebView busy-history is
  * published as a compact chart (see WebViewPerfMath.webViewChart) — both
  * resolve upstream SDK gaps this plugin's README used to document as
  * limitations. All of it feeds into the same status line the tuning
  * summary already uses.
  */
-public final class CpuTuningPlugin implements KioskPlugin {
+public final class DevicePerformancePlugin implements KioskPlugin {
     private static final long DIAGNOSTICS_INTERVAL_S = 10L;
 
     private final AtomicBoolean alive = new AtomicBoolean();
@@ -97,8 +97,8 @@ public final class CpuTuningPlugin implements KioskPlugin {
                     break;
                 case "restoreDefaults": {
                     Map<String, Object> defaults = new HashMap<>();
-                    defaults.put("cpuTier", CpuTuningMath.TIER_AUTO);
-                    defaults.put("gpuTier", CpuTuningMath.TIER_AUTO);
+                    defaults.put("cpuTier", TuningMath.TIER_AUTO);
+                    defaults.put("gpuTier", TuningMath.TIER_AUTO);
                     defaults.put("batterySaver", false);
                     defaults.put("maxFreqPercent", 100);
                     defaults.put("minFreqPercent", 0);
@@ -178,9 +178,9 @@ public final class CpuTuningPlugin implements KioskPlugin {
 
         StringBuilder script = new StringBuilder();
 
-        String cpuTier = String.valueOf(settings.getOrDefault("cpuTier", CpuTuningMath.TIER_AUTO));
-        String cpuGov = cpuGovernors.isEmpty() ? null : CpuTuningMath.resolveGovernor(cpuTier, cpuGovernors);
-        if (cpuGov != null && CpuTuningMath.isSafeGovernorName(cpuGov)) {
+        String cpuTier = String.valueOf(settings.getOrDefault("cpuTier", TuningMath.TIER_AUTO));
+        String cpuGov = cpuGovernors.isEmpty() ? null : TuningMath.resolveGovernor(cpuTier, cpuGovernors);
+        if (cpuGov != null && TuningMath.isSafeGovernorName(cpuGov)) {
             script.append("for p in /sys/devices/system/cpu/cpufreq/policy*; do echo ")
                 .append(cpuGov).append(" > \"$p/scaling_governor\" 2>/dev/null; done\n");
         }
@@ -209,10 +209,10 @@ public final class CpuTuningPlugin implements KioskPlugin {
                 .append("done\n");
         }
 
-        String gpuTier = String.valueOf(settings.getOrDefault("gpuTier", CpuTuningMath.TIER_AUTO));
+        String gpuTier = String.valueOf(settings.getOrDefault("gpuTier", TuningMath.TIER_AUTO));
         String gpuGov = gpuNodePath != null && !gpuGovernors.isEmpty()
-            ? CpuTuningMath.resolveGovernor(gpuTier, gpuGovernors) : null;
-        if (gpuGov != null && CpuTuningMath.isSafeGovernorName(gpuGov)) {
+            ? TuningMath.resolveGovernor(gpuTier, gpuGovernors) : null;
+        if (gpuGov != null && TuningMath.isSafeGovernorName(gpuGov)) {
             script.append("echo ").append(gpuGov).append(" > \"").append(gpuNodePath).append("/governor\" 2>/dev/null\n");
         }
 
@@ -243,20 +243,20 @@ public final class CpuTuningPlugin implements KioskPlugin {
         publishEntities();
     }
 
-    /** Publishes CpuEntities' four always-present sensors (null state means
-     *  "not known yet", not "missing entity" — see CpuEntities' class
+    /** Publishes WebViewEntities' four always-present sensors (null state means
+     *  "not known yet", not "missing entity" — see WebViewEntities' class
      *  doc), plus the WebView busy-history chart when there's enough
      *  retained history to draw one. Deliberately excludes system CPU %
      *  and temperature — Kiosk Satellite already publishes those as its
      *  own native entities. */
     private void publishEntities() {
         WebViewPerf.Result render = latestRender;
-        List<CpuEntities.Entity> entities = CpuEntities.compute(
+        List<WebViewEntities.Entity> entities = WebViewEntities.compute(
             render == null ? null : render.busyPct,
             render == null ? null : render.p95MsPerS,
             render == null ? null : render.peakMsPerS,
             render == null ? null : render.reloadsLast24h);
-        for (CpuEntities.Entity e : entities) {
+        for (WebViewEntities.Entity e : entities) {
             host.publishSensor(e.key, e.name, e.metadata, e.state);
         }
 
@@ -269,69 +269,89 @@ public final class CpuTuningPlugin implements KioskPlugin {
         }
     }
 
+    /** One reading per line, not one long dot-joined run-on string: the
+     *  status text is a plain Flutter Text widget on-device, which renders
+     *  `\n` as a real line break — this reads as a list there, even though
+     *  Remote Admin's web view (HTML, no `white-space: pre-line`) collapses
+     *  newlines back to spaces and still shows one line. SDK 1 has no
+     *  structured "list of readings" UI a plugin can address directly (see
+     *  the upstream feature request this plugin's README links); this is
+     *  the best a single `host.status()` string can do until that exists. */
     private String composeStatus(boolean simulation) {
-        StringBuilder msg = new StringBuilder();
-        msg.append("CPU: ").append(settings.getOrDefault("cpuTier", CpuTuningMath.TIER_AUTO));
+        List<String> lines = new ArrayList<>();
+        StringBuilder tuning = new StringBuilder();
+        tuning.append("CPU: ").append(settings.getOrDefault("cpuTier", TuningMath.TIER_AUTO));
         if (gpuNodePath != null) {
-            msg.append(" · GPU: ").append(settings.getOrDefault("gpuTier", CpuTuningMath.TIER_AUTO));
+            tuning.append(" · GPU: ").append(settings.getOrDefault("gpuTier", TuningMath.TIER_AUTO));
         } else {
-            msg.append(" · GPU: not exposed on this panel");
+            tuning.append(" · GPU: not exposed on this panel");
         }
-        msg.append(" · Battery saver: ")
+        tuning.append(" · Battery saver: ")
             .append(Boolean.TRUE.equals(settings.get("batterySaver")) ? "on" : "off");
-        appendDiagnostics(msg);
-        if (simulation) msg.append(" · Simulation mode");
-        return msg.toString();
+        if (simulation) tuning.append(" · Simulation mode");
+        lines.add(tuning.toString());
+        appendDiagnostics(lines);
+        return String.join("\n", lines);
     }
 
-    private void appendDiagnostics(StringBuilder msg) {
+    private void appendDiagnostics(List<String> lines) {
         Map<?, ?> stats = latestStats;
         if (stats != null) {
             Object cpu = stats.get("cpu");
             Object temp = stats.get("temp");
-            if (cpu != null) msg.append(" · System CPU: ").append(formatNumber(cpu)).append("%");
-            if (temp != null) msg.append(" · Temp: ").append(formatNumber(temp)).append("°C");
+            if (cpu != null || temp != null) {
+                StringBuilder line = new StringBuilder();
+                if (cpu != null) line.append("System CPU: ").append(formatNumber(cpu)).append("%");
+                if (temp != null) {
+                    if (line.length() > 0) line.append(" · ");
+                    line.append("Temp: ").append(formatNumber(temp)).append("°C");
+                }
+                lines.add(line.toString());
+            }
         }
         WebViewPerf.Result render = latestRender;
         if (render == null) {
-            msg.append(" · WebView: measuring…");
+            lines.add("WebView: measuring…");
         } else if (render.busyPct == null) {
-            msg.append(" · WebView: no renderer detected");
+            lines.add("WebView: no renderer detected");
         } else {
-            msg.append(" · WebView: ").append(Math.round(render.busyPct))
+            StringBuilder line = new StringBuilder();
+            line.append("WebView: ").append(Math.round(render.busyPct))
                 .append("% (").append(render.verdict).append(")");
             if (render.p95MsPerS != null) {
-                msg.append(" · p95 ").append(Math.round(render.p95MsPerS)).append(" ms/s");
+                line.append(" · p95 ").append(Math.round(render.p95MsPerS)).append(" ms/s");
             }
             if (render.peakMsPerS != null) {
-                msg.append(" · peak ").append(Math.round(render.peakMsPerS)).append(" ms/s");
+                line.append(" · peak ").append(Math.round(render.peakMsPerS)).append(" ms/s");
             }
+            lines.add(line.toString());
         }
         if (render != null) {
-            msg.append(" · ").append(render.reloadsLast24h).append(" renderer reload")
-                .append(render.reloadsLast24h == 1 ? "" : "s").append(" (24h)");
+            lines.add(render.reloadsLast24h + " renderer reload"
+                + (render.reloadsLast24h == 1 ? "" : "s") + " (24h)");
         }
-        appendTopProcesses(msg);
+        appendTopProcesses(lines);
     }
 
     /** Top-3 CPU consumers and the single top RAM consumer — a compact
      *  stand-in for ha-paneld's own full top-5-by-CPU/top-5-by-RAM tables,
-     *  which don't fit a 1000-character single-line status. Names come
-     *  from the kernel's own 16-char-truncated `comm` field, not the full
+     *  which don't fit a 1000-character status. Names come from the
+     *  kernel's own 16-char-truncated `comm` field, not the full
      *  package/command line — see TopProcessMath's class doc for why. */
-    private void appendTopProcesses(StringBuilder msg) {
+    private void appendTopProcesses(List<String> lines) {
         TopProcesses.Result top = latestTop;
         if (!top.byCpu.isEmpty()) {
-            msg.append(" · Top CPU: ");
+            StringBuilder line = new StringBuilder("Top CPU: ");
             for (int i = 0; i < Math.min(3, top.byCpu.size()); i++) {
-                if (i > 0) msg.append(", ");
+                if (i > 0) line.append(", ");
                 TopProcesses.Row r = top.byCpu.get(i);
-                msg.append(r.name).append(" ").append(formatNumber(r.value)).append("%");
+                line.append(r.name).append(" ").append(formatNumber(r.value)).append("%");
             }
+            lines.add(line.toString());
         }
         if (!top.byRam.isEmpty()) {
             TopProcesses.Row r = top.byRam.get(0);
-            msg.append(" · Top RAM: ").append(r.name).append(" ").append(formatNumber(r.value)).append("MB");
+            lines.add("Top RAM: " + r.name + " " + formatNumber(r.value) + "MB");
         }
     }
 
@@ -400,9 +420,9 @@ public final class CpuTuningPlugin implements KioskPlugin {
         // earlier use in this session, so a fresh interactive grant
         // dialog is not expected.
         if (rooted && !Boolean.TRUE.equals(settings.get("simulation"))) {
-            String cpuGov = cpuGovernors.isEmpty() ? null : CpuTuningMath.resolveGovernor(CpuTuningMath.TIER_AUTO, cpuGovernors);
+            String cpuGov = cpuGovernors.isEmpty() ? null : TuningMath.resolveGovernor(TuningMath.TIER_AUTO, cpuGovernors);
             StringBuilder script = new StringBuilder();
-            if (cpuGov != null && CpuTuningMath.isSafeGovernorName(cpuGov)) {
+            if (cpuGov != null && TuningMath.isSafeGovernorName(cpuGov)) {
                 script.append("for p in /sys/devices/system/cpu/cpufreq/policy*; do ")
                     .append("echo ").append(cpuGov).append(" > \"$p/scaling_governor\" 2>/dev/null; ")
                     .append("maxHw=$(cat \"$p/cpuinfo_max_freq\" 2>/dev/null); minHw=$(cat \"$p/cpuinfo_min_freq\" 2>/dev/null); ")
@@ -411,8 +431,8 @@ public final class CpuTuningPlugin implements KioskPlugin {
                     .append("done\n");
             }
             if (gpuNodePath != null && !gpuGovernors.isEmpty()) {
-                String gpuGov = CpuTuningMath.resolveGovernor(CpuTuningMath.TIER_AUTO, gpuGovernors);
-                if (gpuGov != null && CpuTuningMath.isSafeGovernorName(gpuGov)) {
+                String gpuGov = TuningMath.resolveGovernor(TuningMath.TIER_AUTO, gpuGovernors);
+                if (gpuGov != null && TuningMath.isSafeGovernorName(gpuGov)) {
                     script.append("echo ").append(gpuGov).append(" > \"").append(gpuNodePath).append("/governor\" 2>/dev/null\n");
                 }
             }

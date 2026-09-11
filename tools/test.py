@@ -19,11 +19,11 @@ sources = [
     *sorted((root / 'src').rglob('*.java')),
     *sorted((root / 'test').rglob('*.java')),
 ]
-with tempfile.TemporaryDirectory(prefix='cpu-tuning-test-') as directory:
+with tempfile.TemporaryDirectory(prefix='device-performance-test-') as directory:
     subprocess.run([tool('javac'), '--release', '8', '-d', directory, *map(str, sources)], check=True)
-    subprocess.run([tool('java'), '-ea', '-cp', directory, 'CpuTuningTest'], check=True)
+    subprocess.run([tool('java'), '-ea', '-cp', directory, 'TuningMathTest'], check=True)
     subprocess.run([tool('java'), '-ea', '-cp', directory, 'WebViewPerfMathTest'], check=True)
     subprocess.run([tool('java'), '-ea', '-cp', directory, 'TopProcessMathTest'], check=True)
-    subprocess.run([tool('java'), '-ea', '-cp', directory, 'CpuEntitiesTest'], check=True)
+    subprocess.run([tool('java'), '-ea', '-cp', directory, 'WebViewEntitiesTest'], check=True)
 
 subprocess.run([sys.executable, str(root / 'tools/test_android_sdk.py')], check=True)

@@ -10,7 +10,7 @@ import java.util.Map;
  *  package (same convention as the Hello World template's own test). */
 public final class TopProcessMathTest {
     public static void main(String[] args) throws Exception {
-        Class<?> math = Class.forName("me.jxl.kiosk.plugins.cputuning.TopProcessMath");
+        Class<?> math = Class.forName("me.jxl.kiosk.plugins.deviceperformance.TopProcessMath");
 
         // A real-shaped /proc/stat "cpu " line: user nice system idle iowait irq
         // softirq steal guest guest_nice — ten fields, summed for total jiffies.
@@ -31,7 +31,7 @@ public final class TopProcessMathTest {
         Method parseProcDump = math.getDeclaredMethod("parseProcDump", String.class, String.class);
         parseProcDump.setAccessible(true);
         Object snap = parseProcDump.invoke(null, statPart, procPart);
-        Class<?> snapClass = Class.forName("me.jxl.kiosk.plugins.cputuning.TopProcessMath$ProcSnapshot");
+        Class<?> snapClass = Class.forName("me.jxl.kiosk.plugins.deviceperformance.TopProcessMath$ProcSnapshot");
         Field totalField = snapClass.getDeclaredField("totalJiffies"); totalField.setAccessible(true);
         Field jiffiesField = snapClass.getDeclaredField("processJiffies"); jiffiesField.setAccessible(true);
         Field rssField = snapClass.getDeclaredField("rssPages"); rssField.setAccessible(true);
@@ -72,7 +72,7 @@ public final class TopProcessMathTest {
         @SuppressWarnings("unchecked")
         List<Object> ranked = (List<Object>) rankByCpuDelta.invoke(null, cur, prev, 5);
         assertEquals(2, ranked.size(), "only pids with both a prior baseline and a positive delta rank");
-        Class<?> rankedClass = Class.forName("me.jxl.kiosk.plugins.cputuning.TopProcessMath$Ranked");
+        Class<?> rankedClass = Class.forName("me.jxl.kiosk.plugins.deviceperformance.TopProcessMath$Ranked");
         Field pidField = rankedClass.getDeclaredField("pid"); pidField.setAccessible(true);
         Field valueField = rankedClass.getDeclaredField("value"); valueField.setAccessible(true);
         assertEquals(111, pidField.get(ranked.get(0)), "the larger delta (150) ranks first");
