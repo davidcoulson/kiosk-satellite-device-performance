@@ -1,8 +1,8 @@
 # Changelog
 
-## 2026.09.11.01
+## 0.3.1-20260911
 
-- Switch to date-based versioning (`YYYY.MM.DD.NN`), matching this author's other projects.
+- Correction: an earlier attempt at this release used a 4-component date-based version (`2026.09.11.01`), which Kiosk Satellite's plugin manifest validator rejects (`FormatException: Invalid plugin ID or version`) — it requires 3-component semver, optionally with a `-suffix`. That broken release has been removed; this one embeds the date as a semver prerelease suffix instead. No other changes since v0.3.0.
 
 ## 0.3.0
 
