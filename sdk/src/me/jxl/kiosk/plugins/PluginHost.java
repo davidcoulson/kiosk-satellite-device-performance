@@ -16,6 +16,16 @@ public interface PluginHost {
     default void subscribe(String event) { throw new UnsupportedOperationException("SDK 1 required"); }
     /** SDK 1. Stop observing an event. All subscriptions end with the session. */
     default void unsubscribe(String event) { throw new UnsupportedOperationException("SDK 1 required"); }
+    /** SDK 1, shizuku. Current availability, permission, backend UID and version. Does not prompt. */
+    default Map<String, Object> shizukuState() { throw new UnsupportedOperationException("Shizuku is unavailable"); }
+    /** SDK 1, shizuku. Run an absolute executable with separate arguments after the user grants KS access. */
+    default void executeShizuku(String[] command, int timeoutMs, CommandCallback callback) { throw new UnsupportedOperationException("Shizuku is unavailable"); }
+    /** SDK 1, screensaver. Register self-contained HTML as a stock screensaver mode. Does not activate it. */
+    default void publishScreensaver(String key, String title, String html) { throw new UnsupportedOperationException("Screensavers are unavailable"); }
+    /** SDK 1, screensaver. Register an HTML path relative to assets/ with scalar JSON data. Assets load on demand. */
+    default void publishScreensaverAsset(String key, String title, String entry, Map<String, Object> data) { throw new UnsupportedOperationException("Screensaver assets are unavailable"); }
+    /** SDK 1, screensaver. Remove a renderer. KS retains the session with a black background. */
+    default void removeScreensaver(String key) { throw new UnsupportedOperationException("Screensavers are unavailable"); }
     /** Publish a bounded chart snapshot. SDK 1. */
     default void publishSeries(String key, Map<String, Object> chart) { throw new UnsupportedOperationException("Charts are unavailable"); }
     /** Remove this session's chart with the given key. */
