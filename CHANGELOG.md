@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+
+- **One root shell per plugin instead of one per command.** Every root call used to spawn a fresh `su`, and Magisk shows its "granted Superuser rights" toast per request. The plugin now holds a single `su` session and writes commands to its stdin, so root is granted once per plugin start.
+- This plugin was the main source: a 10-second tick spawning two `su` processes is twelve grants a minute, enough that Android began discarding the toasts for exceeding its quota — which is how the problem surfaced at all.
+- Process spawning also isn't free on the low-end panels this plugin exists to measure. Measuring a panel shouldn't be a measurable part of that panel's load.
+- Commands are framed by a per-session random sentinel (`echo <token>:$?`), so exit codes and output read exactly as before. Each command runs in a subshell, so one containing `exit` ends that subshell rather than silently killing the session and costing root for the rest of the plugin's life.
+- A timeout or a dead shell closes the session and the next call opens a clean one. Late output from a timed-out command can't be told apart from the next command's, so resynchronising would be guesswork — it's killed instead. Failures cost one extra grant, never silent corruption.
+- The session ends with the plugin: `stop()` closes it, so disabling the plugin doesn't leave a root shell alive.
+- Tested against `sh` rather than `su`, which needs no root or device: the load-bearing assertion is that two commands report the same PID, since a regression to per-command spawning would only show up as toast spam on a panel.
+
 ## 0.6.0
 
 - Upstream shipped a real Readings list ("Show live plugin readings in native settings and Remote Admin", resolving [the feature request](https://github.com/jxlarrea/kiosk-satellite-plugin-hello-world/issues/5) filed for exactly this), so every published measurement now renders as a proper label/value row on-device *and* in Remote Admin. Status text is trimmed to match: it no longer repeats the WebView numbers that now have their own rows, keeping only what the list can't express — the tuning configuration, the top-processes ranking, and the `measuring…` vs `no renderer detected` distinction a null-stated entity would flatten to "No data".

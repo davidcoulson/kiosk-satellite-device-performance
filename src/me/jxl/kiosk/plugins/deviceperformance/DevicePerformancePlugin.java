@@ -421,5 +421,9 @@ public final class DevicePerformancePlugin implements KioskPlugin {
             script.append("settings put global low_power 0 2>/dev/null\n");
             RootShell.run(script.toString(), RootShell.COMMAND_TIMEOUT_MS);
         }
+        // Last, so the restore above still has a shell to run in: ends the
+        // persistent root session rather than leaving a root shell alive
+        // for a plugin that is no longer running.
+        RootShell.shutdown();
     }
 }

@@ -26,5 +26,6 @@ with tempfile.TemporaryDirectory(prefix='device-performance-test-') as directory
     subprocess.run([tool('java'), '-ea', '-cp', directory, 'TopProcessMathTest'], check=True)
     subprocess.run([tool('java'), '-ea', '-cp', directory, 'WebViewEntitiesTest'], check=True)
     subprocess.run([tool('java'), '-ea', '-cp', directory, 'ManifestContractTest'], check=True)
+    subprocess.run([tool('java'), '-ea', '-cp', directory, 'RootShellSessionTest'], check=True)
 
 subprocess.run([sys.executable, str(root / 'tools/test_android_sdk.py')], check=True)
