@@ -58,6 +58,7 @@ public final class WebViewEntitiesTest {
             assertEquals(null, stateField.get(e), "every state is null, not a fabricated zero: " + keyField.get(e));
         }
 
+        verdictLevels();
         System.out.println("PASS: four always-present WebView entities with correct metadata, no CPU%/temperature duplicates, null states represent \"unknown\" not \"missing\".");
     }
 
@@ -73,5 +74,19 @@ public final class WebViewEntitiesTest {
 
     private static boolean objectsEquals(Object a, Object b) {
         return a == null ? b == null : a.equals(b);
+    }
+
+    static void verdictLevels() throws Exception {
+        Class<?> entities = Class.forName("me.jxl.kiosk.plugins.deviceperformance.WebViewEntities");
+        Method level = entities.getDeclaredMethod("verdictLevel", String.class);
+        level.setAccessible(true);
+        // The tile's dot is what someone reads across the room, so the
+        // mapping from verdict to severity is worth pinning: a janky panel
+        // must not show green, and "not measured yet" must not show red.
+        assertEquals("on", level.invoke(null, "smooth"), "smooth is the good case");
+        assertEquals("warn", level.invoke(null, "occasional"), "occasional wants attention");
+        assertEquals("off", level.invoke(null, "janky"), "janky is a failure");
+        assertEquals("", level.invoke(null, (Object) null), "no measurement yet is neutral");
+        assertEquals("", level.invoke(null, "wat"), "an unknown verdict is neutral");
     }
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- **Publishes the WebView responsiveness verdict as a status tile.** The smooth/occasional/janky classification now appears on Remote Admin's Overview Status panel next to Home Assistant, ESPHome and the rest, so "is this panel sluggish?" is answerable at a glance instead of by opening this plugin's page and reading a number. Uses SDK 1's `publishStatusTile`, added upstream in 2026.9.46.
+- Severity follows the classification rather than restating it: smooth is green, occasional is a warning, janky is an error, and "no measurement yet" is neutral rather than alarming — the first window takes a while on a slow panel.
+- The existing text sensor is unchanged. An entity tells Home Assistant; it is no help to someone reading the panel's own admin page, and the ESPHome path it travels is itself one of the things the Status panel reports on.
+- Hosts older than 2026.9.46 throw rather than answering, which is treated as a host without tiles: the entity, readings and chart are unaffected.
+
 ## 0.7.0
 
 - **One root shell per plugin instead of one per command.** Every root call used to spawn a fresh `su`, and Magisk shows its "granted Superuser rights" toast per request. The plugin now holds a single `su` session and writes commands to its stdin, so root is granted once per plugin start.

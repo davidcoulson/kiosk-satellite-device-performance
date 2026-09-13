@@ -35,6 +35,8 @@ import me.jxl.kiosk.plugins.PluginHost;
  * summary already uses.
  */
 public final class DevicePerformancePlugin implements KioskPlugin {
+    /** This session's tile key; removed with the plugin's own teardown. */
+    private static final String VERDICT_TILE = "webview_verdict";
     private static final long DIAGNOSTICS_INTERVAL_S = 10L;
 
     private final AtomicBoolean alive = new AtomicBoolean();
@@ -261,6 +263,7 @@ public final class DevicePerformancePlugin implements KioskPlugin {
         }
         host.publishTextSensor(WebViewEntities.VERDICT_KEY, WebViewEntities.VERDICT_NAME,
             render == null ? null : render.verdict);
+        publishVerdictTile(render == null ? null : render.verdict);
 
         WebViewPerf.HistorySnapshot history = webViewPerf.historySnapshot();
         Map<String, Object> chart = WebViewPerfMath.webViewChart(history.timestampsMs, history.valuesMsPerS);
@@ -268,6 +271,39 @@ public final class DevicePerformancePlugin implements KioskPlugin {
             host.publishSeries("webview_busy", chart);
         } else {
             host.removeSeries("webview_busy");
+        }
+    }
+
+    /**
+     * The responsiveness verdict as a status tile, so "is this panel
+     * sluggish?" is answerable at a glance rather than by opening this
+     * plugin's own page and reading a number.
+     *
+     * The entity above says the same thing to Home Assistant, but an
+     * entity is no help to someone looking at the panel's admin page --
+     * and the ESPHome path it travels is itself one of the things the
+     * Status panel reports on, so it is the wrong dependency for a health
+     * readout.
+     *
+     * Severity follows the classification rather than restating it: smooth
+     * is the good case, occasional is worth knowing about, janky is the
+     * panel visibly failing to keep up. No measurement yet is neutral, not
+     * a fault -- the first window takes a while on a slow panel.
+     *
+     * Hosts before SDK 1's status tiles throw rather than answering, which
+     * is simply a host without tiles; the entity and the readings are
+     * unaffected.
+     */
+    private void publishVerdictTile(String verdict) {
+        try {
+            if (verdict == null) {
+                host.publishStatusTile(VERDICT_TILE, WebViewEntities.VERDICT_NAME, "", "measuring…");
+                return;
+            }
+            host.publishStatusTile(VERDICT_TILE, WebViewEntities.VERDICT_NAME,
+                WebViewEntities.verdictLevel(verdict), verdict);
+        } catch (Throwable ignored) {
+            // An older host: no tiles here, everything else unchanged.
         }
     }
 

@@ -45,6 +45,18 @@ final class WebViewEntities {
      *  in the host's own Readings list alongside the numbers it summarizes,
      *  rather than only existing in status text. */
     static final String VERDICT_KEY = "webview_verdict";
+
+    /** The status tile severity for a verdict: smooth is the good case,
+     *  occasional is worth knowing about, janky is the panel visibly
+     *  failing to keep up. An unrecognised or absent verdict is neutral
+     *  rather than alarming -- no measurement yet is not a fault, and the
+     *  first window takes a while on a slow panel. */
+    static String verdictLevel(String verdict) {
+        if ("smooth".equals(verdict)) return "on";
+        if ("occasional".equals(verdict)) return "warn";
+        if ("janky".equals(verdict)) return "off";
+        return "";
+    }
     static final String VERDICT_NAME = "WebView responsiveness";
 
     static List<Entity> compute(Double webViewBusyPercent, Double webViewP95MsPerS, Double webViewPeakMsPerS,
