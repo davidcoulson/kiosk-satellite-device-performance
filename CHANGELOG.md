@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+
+- **Falls back to Shizuku when direct root is unavailable.** `su` is granted per app UID, so reinstalling Kiosk Satellite gives it a new UID and silently invalidates an existing Magisk grant — after which this plugin reported nothing but "measuring…" on a demonstrably rooted panel. Shizuku's authorization is held against the KS package and survives that.
+- The distinction between reading and writing is kept, because it is real: `top` and `/proc` reads work as shell, so the diagnostics, WebView sampling and top-process list run on either channel. The cpufreq/devfreq writes behind CPU/GPU tuning are denied to an app by SELinux categorically and need a genuinely root channel — direct `su`, or a Shizuku server started from a root shell. Tuning says which channel the panel has when it cannot proceed, instead of a flat "root required".
+- Root is still tried first and still preferred: one grant for the plugin's lifetime against a binder round trip per call.
+
 ## 0.8.0
 
 - **Publishes the WebView responsiveness verdict as a status tile.** The smooth/occasional/janky classification now appears on Remote Admin's Overview Status panel next to Home Assistant, ESPHome and the rest, so "is this panel sluggish?" is answerable at a glance instead of by opening this plugin's page and reading a number. Uses SDK 1's `publishStatusTile`, added upstream in 2026.9.46.

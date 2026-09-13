@@ -104,7 +104,7 @@ final class WebViewPerf {
     /** Runs the probe and advances the delta baseline. Call on a worker
      *  thread — this blocks on a root shell round trip. */
     Result tick(long timeoutMs) {
-        String out = RootShell.runOutput(PROBE_CMD, timeoutMs);
+        String out = PrivilegedShell.runOutput(PROBE_CMD, timeoutMs);
         Map<Integer, Long> cur = WebViewPerfMath.parseRenderRows(out);
         long now = System.currentTimeMillis();
         double dtSeconds = prevSampleAtMs == null ? -1 : (now - prevSampleAtMs) / 1000.0;

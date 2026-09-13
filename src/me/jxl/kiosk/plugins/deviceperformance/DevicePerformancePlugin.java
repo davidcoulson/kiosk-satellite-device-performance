@@ -47,7 +47,14 @@ public final class DevicePerformancePlugin implements KioskPlugin {
     private final TopProcesses topProcesses = new TopProcesses();
 
     // Populated by detect(); null fields mean "not available on this panel".
+    /** Whether the tuning writes can work: the cpufreq/devfreq nodes are
+     *  denied to an app by SELinux categorically, and a Shizuku running as
+     *  shell cannot write them either -- only a genuinely root channel can. */
     private volatile boolean rooted;
+
+    /** Whether the read-only diagnostics have any channel at all. Shell is
+     *  enough for top and /proc, so this is true in cases `rooted` is not. */
+    private volatile boolean privileged;
     private volatile List<String> cpuGovernors = Collections.emptyList();
     private volatile String gpuNodePath;
     private volatile List<String> gpuGovernors = Collections.emptyList();
@@ -63,6 +70,7 @@ public final class DevicePerformancePlugin implements KioskPlugin {
 
     public void start(PluginHost host, Map<String, Object> settings) {
         this.host = host;
+        PrivilegedShell.attach(host);
         alive.set(true);
         worker = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "cpu-tuning");
@@ -127,19 +135,25 @@ public final class DevicePerformancePlugin implements KioskPlugin {
     private void detect() {
         if (Boolean.TRUE.equals(settings.get("simulation"))) {
             rooted = true;
+            privileged = true;
             cpuGovernors = Arrays.asList("performance", "powersave", "schedutil");
             gpuNodePath = null;
             gpuGovernors = Collections.emptyList();
             return;
         }
-        rooted = RootShell.isRooted();
-        if (!rooted) {
+        PrivilegedShell.detect();
+        privileged = PrivilegedShell.available();
+        // Writing a governor needs a channel that is actually root: direct
+        // su, or a Shizuku server that was started from a root shell.
+        rooted = PrivilegedShell.MODE_ROOT.equals(PrivilegedShell.mode())
+            || PrivilegedShell.shizukuIsRoot();
+        if (!privileged) {
             cpuGovernors = Collections.emptyList();
             gpuNodePath = null;
             gpuGovernors = Collections.emptyList();
             return;
         }
-        String out = RootShell.runOutput(
+        String out = PrivilegedShell.runOutput(
             "cat /sys/devices/system/cpu/cpufreq/policy0/scaling_available_governors 2>/dev/null; echo '---'; "
                 + "g=$(ls -d /sys/class/devfreq/*gpu* 2>/dev/null | head -1); echo \"$g\"; echo '---'; "
                 + "[ -n \"$g\" ] && cat \"$g/available_governors\" 2>/dev/null",
@@ -174,7 +188,11 @@ public final class DevicePerformancePlugin implements KioskPlugin {
             return;
         }
         if (!rooted) {
-            host.status("Root access is required for CPU/GPU tuning and isn't available on this panel.", true);
+            host.status(privileged
+                ? "CPU/GPU tuning needs root. This panel has " + PrivilegedShell.describe()
+                    + ", which can read the diagnostics but cannot write the cpufreq nodes."
+                : "Root or Shizuku access is required for CPU/GPU tuning and neither is "
+                    + "available on this panel.", true);
             return;
         }
 
@@ -221,7 +239,7 @@ public final class DevicePerformancePlugin implements KioskPlugin {
         boolean batterySaver = Boolean.TRUE.equals(settings.get("batterySaver"));
         script.append("settings put global low_power ").append(batterySaver ? 1 : 0).append(" 2>/dev/null\n");
 
-        boolean ok = RootShell.run(script.toString(), RootShell.COMMAND_TIMEOUT_MS);
+        boolean ok = PrivilegedShell.run(script.toString(), RootShell.COMMAND_TIMEOUT_MS);
         status(ok);
     }
 
@@ -404,7 +422,7 @@ public final class DevicePerformancePlugin implements KioskPlugin {
             if (ok && data instanceof Map) latestStats = (Map<?, ?>) data;
             refreshDiagnosticsStatus();
         }));
-        if (rooted) {
+        if (privileged) {
             latestRender = webViewPerf.tick(RootShell.COMMAND_TIMEOUT_MS);
             latestTop = topProcesses.tick(RootShell.COMMAND_TIMEOUT_MS);
             refreshDiagnosticsStatus();
@@ -455,11 +473,12 @@ public final class DevicePerformancePlugin implements KioskPlugin {
                 }
             }
             script.append("settings put global low_power 0 2>/dev/null\n");
-            RootShell.run(script.toString(), RootShell.COMMAND_TIMEOUT_MS);
+            PrivilegedShell.run(script.toString(), RootShell.COMMAND_TIMEOUT_MS);
         }
         // Last, so the restore above still has a shell to run in: ends the
-        // persistent root session rather than leaving a root shell alive
-        // for a plugin that is no longer running.
-        RootShell.shutdown();
+        // persistent root session and forgets the channel rather than
+        // leaving a root shell alive for a plugin that is no longer
+        // running.
+        PrivilegedShell.detach();
     }
 }

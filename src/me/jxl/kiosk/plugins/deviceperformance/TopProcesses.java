@@ -49,7 +49,7 @@ final class TopProcesses {
      *  thread — this blocks on a root shell round trip scanning every
      *  process on the panel. */
     Result tick(long timeoutMs) {
-        String out = RootShell.runOutput(PROBE_CMD, timeoutMs);
+        String out = PrivilegedShell.runOutput(PROBE_CMD, timeoutMs);
         String[] parts = out == null ? new String[0] : out.split("\n@@\n");
         TopProcessMath.ProcSnapshot snap = TopProcessMath.parseProcDump(
             parts.length > 0 ? parts[0] : null,
