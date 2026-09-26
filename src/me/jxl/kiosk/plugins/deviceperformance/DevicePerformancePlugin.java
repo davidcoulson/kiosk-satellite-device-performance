@@ -32,7 +32,9 @@ import me.jxl.kiosk.plugins.PluginHost;
  * published as a compact chart (see WebViewPerfMath.webViewChart) — both
  * resolve upstream SDK gaps this plugin's README used to document as
  * limitations. All of it feeds into the same status line the tuning
- * summary already uses.
+ * summary already uses. On an agent host (see HostMode) there is no
+ * WebView, so that half is skipped outright: no probe, no entities, no
+ * chart, no tile.
  */
 public final class DevicePerformancePlugin implements KioskPlugin {
     /** This session's tile key; removed with the plugin's own teardown. */
@@ -66,7 +68,12 @@ public final class DevicePerformancePlugin implements KioskPlugin {
     private volatile Map<?, ?> latestStats; // {battery, charging, cpu, temp} from getStats
     private volatile WebViewPerf.Result latestRender; // null until the first diagnostics tick
     private volatile TopProcesses.Result latestTop = TopProcesses.Result.EMPTY;
-    private ScheduledFuture<?> diagnosticsTask;
+    private volatile ScheduledFuture<?> diagnosticsTask;
+
+    /** Whether the host is a headless agent install with no WebView (see
+     *  HostMode). Read once per start: agent mode only changes with an app
+     *  restart, and that restarts this plugin too. */
+    private volatile boolean agent;
 
     public void start(PluginHost host, Map<String, Object> settings) {
         this.host = host;
@@ -77,9 +84,29 @@ public final class DevicePerformancePlugin implements KioskPlugin {
             t.setDaemon(true);
             return t;
         });
+        readHostMode();
+        configure(settings);
+    }
+
+    /** Asks the host whether it is an agent, and only then starts the
+     *  diagnostics timer -- so an agent's first tick can't publish the
+     *  WebView entities it is about to skip. `getHostApi` needs no
+     *  capability. A host that fails or throws is treated as a panel,
+     *  which is how every host behaved before agent mode existed. */
+    private void readHostMode() {
+        try {
+            host.executeCommand("getHostApi", Collections.emptyMap(),
+                (ok, data, error) -> submit(() -> startDiagnostics(ok && HostMode.agent(data))));
+        } catch (RuntimeException e) {
+            submit(() -> startDiagnostics(false));
+        }
+    }
+
+    private void startDiagnostics(boolean agentHost) {
+        agent = agentHost;
+        if (agent) retractWebView();
         diagnosticsTask = worker.scheduleWithFixedDelay(
             () -> submit(this::runDiagnosticsTick), 0, DIAGNOSTICS_INTERVAL_S, TimeUnit.SECONDS);
-        configure(settings);
     }
 
     public void configure(Map<String, Object> values) {
@@ -270,6 +297,7 @@ public final class DevicePerformancePlugin implements KioskPlugin {
      *  and temperature — Kiosk Satellite already publishes those as its
      *  own native entities. */
     private void publishEntities() {
+        if (agent) return; // no WebView on an agent: these would read "unknown" forever
         WebViewPerf.Result render = latestRender;
         List<WebViewEntities.Entity> entities = WebViewEntities.compute(
             render == null ? null : render.busyPct,
@@ -286,9 +314,32 @@ public final class DevicePerformancePlugin implements KioskPlugin {
         WebViewPerf.HistorySnapshot history = webViewPerf.historySnapshot();
         Map<String, Object> chart = WebViewPerfMath.webViewChart(history.timestampsMs, history.valuesMsPerS);
         if (chart != null) {
-            host.publishSeries("webview_busy", chart);
+            host.publishSeries(WebViewEntities.CHART_KEY, chart);
         } else {
-            host.removeSeries("webview_busy");
+            host.removeSeries(WebViewEntities.CHART_KEY);
+        }
+    }
+
+    /** Removes every WebView publication -- the four sensors, the verdict
+     *  text sensor, the chart and the tile -- once, when the host turns
+     *  out to be an agent. The host drops a session's entities, charts and
+     *  tiles when that session ends, so an earlier run's are normally gone
+     *  before this runs and each call is a no-op; it's here so an agent
+     *  never carries them regardless of what the host keeps.
+     *
+     *  Oldest API first: a host without charts has no tiles either, so one
+     *  that throws partway has already had everything it could hold
+     *  removed. */
+    private void retractWebView() {
+        try {
+            for (WebViewEntities.Entity e : WebViewEntities.compute(null, null, null, null)) {
+                host.removeSensor(e.key);
+            }
+            host.removeTextSensor(WebViewEntities.VERDICT_KEY);
+            host.removeSeries(WebViewEntities.CHART_KEY);
+            host.removeStatusTile(VERDICT_TILE);
+        } catch (Throwable ignored) {
+            // An older host: whatever it lacks, it never held.
         }
     }
 
@@ -361,7 +412,9 @@ public final class DevicePerformancePlugin implements KioskPlugin {
         // a null-stated entity shows as a bare "No data" without saying
         // which of the two it is.
         WebViewPerf.Result render = latestRender;
-        if (render == null) {
+        if (agent) {
+            // No WebView to measure, so neither state applies.
+        } else if (render == null) {
             lines.add("WebView: measuring…");
         } else if (render.busyPct == null) {
             lines.add("WebView: no renderer detected");
@@ -423,7 +476,9 @@ public final class DevicePerformancePlugin implements KioskPlugin {
             refreshDiagnosticsStatus();
         }));
         if (privileged) {
-            latestRender = webViewPerf.tick(RootShell.COMMAND_TIMEOUT_MS);
+            // An agent has no renderer to find: skip the probe rather than
+            // run a /proc scan every tick that can only ever come back empty.
+            if (!agent) latestRender = webViewPerf.tick(RootShell.COMMAND_TIMEOUT_MS);
             latestTop = topProcesses.tick(RootShell.COMMAND_TIMEOUT_MS);
             refreshDiagnosticsStatus();
         }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+- **Skips the WebView diagnostics on a Kiosk Satellite agent.** An agent is a headless management install on a projector or media box, with no dashboard and no WebView, so the four WebView sensors, the `webview_verdict` text sensor, the `webview_busy` chart and the responsiveness status tile could only ever read "unknown" there. None of them are published on an agent now, and the root `/proc` renderer probe behind them doesn't run.
+- Detection is the host's own answer, not a guess: `getHostApi` reports `agent`, and the plugin asks once at start (agent mode only changes with an app restart, which restarts plugins too). The diagnostics timer waits for that answer, so an agent's first tick can't publish what it's about to skip.
+- On an agent, the plugin also removes those publications at start. The host already drops a session's entities, chart and tile when the session ends, so this is normally a no-op; Home Assistant may still hold the old entities in its registry as unavailable, which is for HA to clean up.
+- CPU/RAM/temperature, top processes and every tuning control are unchanged. Hosts from before agent mode omit the field, and a failed or throwing `getHostApi` is treated the same way: as a panel, exactly as before.
+
 ## 0.9.0
 
 - **Falls back to Shizuku when direct root is unavailable.** `su` is granted per app UID, so reinstalling Kiosk Satellite gives it a new UID and silently invalidates an existing Magisk grant — after which this plugin reported nothing but "measuring…" on a demonstrably rooted panel. Shizuku's authorization is held against the KS package and survives that.

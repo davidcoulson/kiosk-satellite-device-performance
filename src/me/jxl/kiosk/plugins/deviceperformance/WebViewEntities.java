@@ -59,6 +59,10 @@ final class WebViewEntities {
     }
     static final String VERDICT_NAME = "WebView responsiveness";
 
+    /** The busy-history chart's series key, published alongside these
+     *  entities and retracted with them on an agent host. */
+    static final String CHART_KEY = "webview_busy";
+
     static List<Entity> compute(Double webViewBusyPercent, Double webViewP95MsPerS, Double webViewPeakMsPerS,
                                  Integer rendererReloads24h) {
         List<Entity> entities = new ArrayList<>();

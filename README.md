@@ -39,6 +39,8 @@ Refreshed every 10 seconds, independent of the tuning controls above, and — as
 | WebView dashboard responsiveness | A root `/proc` probe for the Chromium renderer's `CrRendererMain` thread — smooth / occasional / janky, by %-of-one-core busy time, plus a rolling p95/peak and a 24h renderer-reload count (see below) | Yes | `sensor.webview_busy_percent`, `sensor.webview_p95_ms_per_s`, `sensor.webview_peak_ms_per_s`, `sensor.renderer_reloads_24h`, `text_sensor.webview_verdict` |
 | Top processes by CPU and RAM | A root `/proc/stat` + `/proc/<pid>/stat` scan, ranked by jiffy delta (CPU) and resident pages (RAM) — shown as top-3 CPU and top-1 RAM in status text | Yes | Not published as entities — see below |
 
+On a Kiosk Satellite **agent** (a headless management install on a projector or media box, with no dashboard) there is no WebView to measure, so the WebView row above is skipped entirely: no probe, no entities, no chart and no status tile. The plugin asks the host once at start (`getHostApi`'s `agent` field); older hosts don't report it and are treated as panels.
+
 Every sensor entity publishes on every diagnostics tick, with a null state (Home Assistant's "unknown") rather than a fabricated zero for whatever hasn't been measured yet (e.g. `webview_busy_percent` before the first root probe completes, or on an unrooted panel where it never will). Top processes stay status-text-only: the ranking is a list of dynamically-named rows (whatever process happens to be busiest right now), not a fixed set of keys a sensor entity's schema expects.
 
 ### Readings render as a real list, and the status text no longer duplicates them
@@ -82,7 +84,7 @@ python3 tools/test.py
 python3 tools/build.py
 ```
 
-`tools/test.py` runs device-free unit tests of the governor-resolution and frequency-percent math (including the per-cluster hardware-max scenario from a real big.LITTLE panel), the WebView jiffy-delta parsing (including a `/proc/pid/stat` line whose `comm` field itself contains a stray `)`, the classic bug in a naive port) and chart-payload building, the top-processes `/proc` dump parsing/ranking/RSS-to-MB math, and which of the four sensor entities publish with what state — it proves the logic, not device compatibility. `tools/build.py` produces the ZIP, checksum and manifest in `dist/`.
+`tools/test.py` runs device-free unit tests of the governor-resolution and frequency-percent math (including the per-cluster hardware-max scenario from a real big.LITTLE panel), the WebView jiffy-delta parsing (including a `/proc/pid/stat` line whose `comm` field itself contains a stray `)`, the classic bug in a naive port) and chart-payload building, the top-processes `/proc` dump parsing/ranking/RSS-to-MB math, which of the four sensor entities publish with what state, and that an agent host gets none of the WebView publications while every other host keeps them — it proves the logic, not device compatibility. `tools/build.py` produces the ZIP, checksum and manifest in `dist/`.
 
 ## Renamed from CPU Performance Mode
 
