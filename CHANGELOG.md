@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Plugin 0.10.1: adds an icon for Community Plugins and Browse plugins.
+
 ## 0.10.0
 
 - **Skips the WebView diagnostics on a Kiosk Satellite agent.** An agent is a headless management install on a projector or media box, with no dashboard and no WebView, so the four WebView sensors, the `webview_verdict` text sensor, the `webview_busy` chart and the responsiveness status tile could only ever read "unknown" there. None of them are published on an agent now, and the root `/proc` renderer probe behind them doesn't run.
