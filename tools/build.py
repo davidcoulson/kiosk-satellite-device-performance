@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 
 from android_sdk import android_platform
+from plugin_assets import asset_files, MAX_PACKAGE_BYTES
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -20,6 +21,10 @@ args = parser.parse_args()
 plugin = Path(args.plugin).resolve()
 manifest_bytes = (plugin / 'kiosk-satellite-plugin.json').read_bytes()
 manifest = json.loads(manifest_bytes)
+try:
+    assets = asset_files(plugin)
+except ValueError as error:
+    parser.error(str(error))
 sdk_root = Path(os.environ.get('ANDROID_HOME', os.environ.get('ANDROID_SDK_ROOT', str(Path.home() / 'android-sdk'))))
 java_root = os.environ.get('JAVA_HOME')
 def java_tool(name):
@@ -57,6 +62,11 @@ with tempfile.TemporaryDirectory(prefix='kiosk-plugin-') as temp:
         add(archive, 'kiosk-satellite-plugin.json', manifest_bytes)
         add(archive, 'plugin.jar', jar.read_bytes())
         add(archive, 'LICENSE', (plugin / 'LICENSE').read_bytes())
+        for name, file in assets:
+            add(archive, name, file.read_bytes())
+    if package.stat().st_size > MAX_PACKAGE_BYTES:
+        package.unlink()
+        raise SystemExit('Plugin ZIP must be at most 4 MB')
     digest = hashlib.sha256(package.read_bytes()).hexdigest()
     package.with_suffix('.zip.sha256').write_text(f'{digest}  {package.name}\n')
     (out / 'kiosk-satellite-plugin.json').write_bytes(manifest_bytes)

@@ -31,3 +31,4 @@ with tempfile.TemporaryDirectory(prefix='device-performance-test-') as directory
     subprocess.run([tool('java'), '-ea', '-cp', directory, 'HostModeTest'], check=True)
 
 subprocess.run([sys.executable, str(root / 'tools/test_android_sdk.py')], check=True)
+subprocess.run([sys.executable, str(root / 'tools/test_plugin_assets.py')], check=True)
